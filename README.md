@@ -1,7 +1,5 @@
 # ChatDKU Website Developer Documentation
 
-Last updated by Anar Nyambayar, October 2025
-
 ## Our Stack:
 
 We're using the Next.js framework for its quick development opportunities and rich open-source community. Since our backend is handled by Django, we are serving the website as a static site using `next build`.
