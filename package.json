@@ -9,8 +9,9 @@
 		"start": "next start",
 		"lint": "next lint",
 		"typecheck": "tsc --noEmit",
-		"test": "npm run typecheck && jest --coverage",
-		"test:watch": "jest --watch"
+		"test": "npm run typecheck && jest --coverage --verbose",
+		"test:watch": "jest --watch",
+		"test:production": "npm run typecheck && jest --coverage --production"
 	},
 	"dependencies": {
 		"@radix-ui/react-checkbox": "^1.2.3",

@@ -101,7 +101,7 @@ describe('End-to-End Chat Flow Integration Tests', () => {
     
     // Submit the message
     const submitButton = screen.getByRole('button', { name: /submit/i }) || 
-                        screen.getByRole('button').filter(btn => btn.textContent?.includes(''));
+                        Array.from(screen.getAllByRole('button')).find((btn: HTMLElement) => btn.textContent?.includes(''));
     await user.click(submitButton);
     
     // 4. Verify API call was made
@@ -133,7 +133,7 @@ describe('End-to-End Chat Flow Integration Tests', () => {
     });
     
     // Find and click the microphone button
-    const micButton = screen.getByRole('button').find(btn => 
+    const micButton = Array.from(screen.getAllByRole('button')).find((btn: HTMLElement) => 
       btn.querySelector('svg') // Mic button should have an icon
     );
     
@@ -151,7 +151,7 @@ describe('End-to-End Chat Flow Integration Tests', () => {
       // Simulate transcription response
       const { io } = require('socket.io-client');
       const mockSocket = io();
-      const transcriptionHandler = mockSocket.on.mock.calls.find(call => call[0] === 'audio_transcribed')?.[1];
+      const transcriptionHandler = mockSocket.on.mock.calls.find((call: any[]) => call[0] === 'audio_transcribed')?.[1];
       
       if (transcriptionHandler) {
         transcriptionHandler({ text: 'What are the office hours?' });
@@ -178,7 +178,7 @@ describe('End-to-End Chat Flow Integration Tests', () => {
     const textarea = screen.getByPlaceholderText(/Type your message/);
     await user.type(textarea, 'Test question');
     
-    const submitButton = screen.getByRole('button').filter(btn => 
+    const submitButton = Array.from(screen.getAllByRole('button')).filter((btn: HTMLElement) => 
       btn.textContent?.includes('') || btn.closest('form')
     )[0];
     await user.click(submitButton);
@@ -267,7 +267,7 @@ describe('End-to-End Chat Flow Integration Tests', () => {
     const textarea = screen.getByPlaceholderText(/Type your message/);
     await user.type(textarea, 'test'); // Special test command
     
-    const submitButton = screen.getByRole('button').filter(btn => 
+    const submitButton = Array.from(screen.getAllByRole('button')).filter((btn: HTMLElement) => 
       btn.textContent?.includes('') || btn.closest('form')
     )[0];
     await user.click(submitButton);
@@ -293,7 +293,7 @@ describe('End-to-End Chat Flow Integration Tests', () => {
     const prodTextarea = screen.getByPlaceholderText(/Type your message/);
     await user.type(prodTextarea, 'Normal question');
     
-    const prodSubmitButton = screen.getByRole('button').filter(btn => 
+    const prodSubmitButton = Array.from(screen.getAllByRole('button')).filter((btn: HTMLElement) => 
       btn.textContent?.includes('') || btn.closest('form')
     )[0];
     await user.click(prodSubmitButton);
@@ -366,7 +366,7 @@ describe('End-to-End Chat Flow Integration Tests', () => {
     await user.type(textarea, 'Quick message');
     
     // Submit multiple times rapidly (should be handled gracefully)
-    const submitButton = screen.getByRole('button').filter(btn => 
+    const submitButton = Array.from(screen.getAllByRole('button')).filter((btn: HTMLElement) => 
       btn.textContent?.includes('') || btn.closest('form')
     )[0];
     
@@ -412,7 +412,7 @@ const example = "code block";
     const textarea = screen.getByPlaceholderText(/Type your message/);
     await user.type(textarea, 'Show me complex markdown');
     
-    const submitButton = screen.getByRole('button').filter(btn => 
+    const submitButton = Array.from(screen.getAllByRole('button')).filter((btn: HTMLElement) => 
       btn.textContent?.includes('') || btn.closest('form')
     )[0];
     await user.click(submitButton);
