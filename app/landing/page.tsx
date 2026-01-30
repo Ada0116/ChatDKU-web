@@ -2,29 +2,31 @@
 import About from "@/components/about";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
-import { getNewSession} from "@/lib/convosNew";
+import { getNewSession } from "@/lib/convosNew";
 import { useState } from "react";
 import Cookies from "js-cookie";
 import { useRouter } from "next/navigation";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipProvider,
+	TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export default function AboutPage() {
-	  
-
 	const [termsAccepted, setTermsAccepted] = useState(false);
-	
+
 	const router = useRouter();
 
 	const handleProceed = async () => {
 		if (termsAccepted) {
-			// Set cookie for terms acceptance - expires in 30 days
-			Cookies.set("terms_accepted", "true", { expires: 30 });
+			// Set cookie for terms acceptance - expires in 60 days
+			Cookies.set("terms_accepted", "true", { expires: 60 });
 			// Navigate to the main app
-			try{
-
+			try {
 				await getNewSession();
-			}catch (e){
-				console.error("session create failed")
+			} catch (e) {
+				console.error("session create failed");
 			}
 			router.push("/");
 		}
@@ -50,13 +52,20 @@ export default function AboutPage() {
 						</label>
 					</div>
 
-					<p className="text-xs text-muted-foreground mt-2">We save a cookie to remember your preferences.</p>
+					<p className="text-xs text-muted-foreground mt-2">
+						We save a cookie to remember your preferences.
+					</p>
 
 					<TooltipProvider>
 						<Tooltip>
 							<TooltipTrigger asChild className="my-8">
 								<div>
-									<Button variant="default" className="rounded-full" disabled={!termsAccepted} onClick={handleProceed}>
+									<Button
+										variant="default"
+										className="rounded-full"
+										disabled={!termsAccepted}
+										onClick={handleProceed}
+									>
 										<p>
 											Proceed to <span className="font-bold">ChatDKU</span>
 										</p>

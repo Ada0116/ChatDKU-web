@@ -290,7 +290,6 @@ const About: React.FC = () => {
 					</Dialog>
 					<Link href="/ChatDKU-1.0_Introduction.pdf">
 						<Button variant={"outline"} className=" flex flex-row items-center">
-							{" "}
 							Get the Guidebook
 							<ArrowUpRight />
 						</Button>
