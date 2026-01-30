@@ -3,6 +3,7 @@ import { marked } from 'marked';
 // Mock DOM for testing
 Object.defineProperty(window, 'document', {
   writable: true,
+  configurable: true,
   value: {
     createElement: jest.fn(() => ({
       id: '',

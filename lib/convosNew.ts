@@ -190,7 +190,7 @@ export async function getConversations(): Promise<Convo[]> {
  * Get the stored API endpoint from localStorage
  */
 export function getStoredEndpoint(): string {
-  if (typeof window === 'undefined') return API_ENDPOINTS.CHAT_DEFAULT;
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') return API_ENDPOINTS.CHAT_DEFAULT;
   return localStorage.getItem(ENDPOINT_STORAGE_KEY) || API_ENDPOINTS.CHAT_DEFAULT;
 }
 
@@ -198,7 +198,7 @@ export function getStoredEndpoint(): string {
  * Store the API endpoint in localStorage
  */
 export function setStoredEndpoint(endpoint: string): void {
-  if (typeof window === 'undefined') return;
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
   localStorage.setItem(ENDPOINT_STORAGE_KEY, endpoint);
 }
 
@@ -206,6 +206,6 @@ export function setStoredEndpoint(endpoint: string): void {
  * Clear the stored API endpoint from localStorage
  */
 export function clearStoredEndpoint(): void {
-  if (typeof window === 'undefined') return;
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
   localStorage.removeItem(ENDPOINT_STORAGE_KEY);
 }

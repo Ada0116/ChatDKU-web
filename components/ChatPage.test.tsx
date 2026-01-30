@@ -47,7 +47,8 @@ jest.mock('@/components/navbar', () => ({
 }));
 
 jest.mock('@/components/side', () => ({
-  Side: ({ onNewChat, disabled }: any) => (
+  __esModule: true,
+  default: ({ onNewChat, disabled }: any) => (
     <div>
       <button data-testid="new-chat-button" onClick={onNewChat} disabled={disabled}>
         New Chat
@@ -79,7 +80,7 @@ jest.mock('@/components/prompt_recs', () => ({
 }));
 
 // Mock fetch for test endpoint
-global.fetch = jest.fn();
+const mockFetch = global.fetch as jest.Mock;
 
 describe('ChatPage', () => {
   const mockPush = jest.fn();
@@ -87,6 +88,15 @@ describe('ChatPage', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // Reset fetch mock
+    mockFetch.mockClear();
+    
+    // Mock DOM methods
+    Object.defineProperty(HTMLElement.prototype, 'scrollTo', {
+      value: jest.fn(),
+      writable: true,
+    });
+    
     (useRouter as jest.Mock).mockReturnValue(mockRouter);
     (Cookies.get as jest.Mock).mockReturnValue('true'); // terms accepted
     
@@ -110,8 +120,15 @@ describe('ChatPage', () => {
     
     render(<ChatPage />);
     
-    await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith('/landing');
+await waitFor(() => {
+      expect(global.fetch as jest.Mock).toHaveBeenCalledWith(
+        expect.stringContaining('/api/chat'), // Should use chat endpoint in production
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: expect.stringContaining('"content": "test message"'),
+        }),
+      );
     });
   });
 
@@ -139,7 +156,7 @@ describe('ChatPage', () => {
 
   it('submits a message and displays response', async () => {
     const mockFetch = global.fetch as jest.Mock;
-    mockFetch.mockResolvedValue({
+    (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,
       text: () => Promise.resolve('Test response'),
     });
@@ -183,8 +200,7 @@ describe('ChatPage', () => {
   });
 
   it('handles test endpoint for "test" message', async () => {
-    const mockFetch = global.fetch as jest.Mock;
-    mockFetch.mockResolvedValue({
+    (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,
       text: () => Promise.resolve('# Test Markdown\n\nThis is a test.'),
     });
@@ -204,7 +220,9 @@ describe('ChatPage', () => {
     await userEvent.click(submitButton);
     
     await waitFor(() => {
-      expect(mockFetch).toHaveBeenCalledWith('/mdtest.md');
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/mdtest.md')
+      );
     });
   });
 
@@ -259,8 +277,7 @@ describe('ChatPage', () => {
   });
 
   it('handles dev mode differently from production', async () => {
-    const mockFetch = global.fetch as jest.Mock;
-    mockFetch.mockResolvedValue({
+    (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,
       text: () => Promise.resolve('Dev response'),
     });

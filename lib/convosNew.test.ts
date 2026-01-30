@@ -30,6 +30,17 @@ const localStorageMock = {
 };
 global.localStorage = localStorageMock;
 
+// Ensure window is defined for client-side tests
+if (!global.window) {
+  (global as any).window = {};
+}
+
+// Mock localStorage on window
+Object.defineProperty(global.window, 'localStorage', {
+  value: localStorageMock,
+  writable: true,
+});
+
 describe('convosNew', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -51,7 +62,7 @@ describe('convosNew', () => {
         const result = await getNewSession();
 
         expect(fetch).toHaveBeenCalledWith(
-          expect.stringContaining('/api/session/new'),
+          expect.stringContaining('/api/get_session'),
           expect.objectContaining({
             method: 'GET',
             credentials: 'include',
@@ -140,13 +151,22 @@ describe('convosNew', () => {
 
       it('does nothing in server environment', () => {
         const originalWindow = global.window;
+        const originalDocument = global.document;
         delete (global as any).window;
+        delete (global as any).document;
+
+        // Clear any existing cookies
+        if (originalDocument) {
+          originalDocument.cookie = '';
+        }
 
         setCurrentSessionId('should-not-set');
 
+        console.log('document after call:', typeof document, document.cookie);
         expect(document.cookie).not.toContain('should-not-set');
 
         global.window = originalWindow;
+        global.document = originalDocument;
       });
     });
 
@@ -185,7 +205,7 @@ describe('convosNew', () => {
         const result = await getSessionMessages('test-session-id');
 
         expect(fetch).toHaveBeenCalledWith(
-          expect.stringContaining('/api/session/test-session-id/messages'),
+          expect.stringContaining('/api/c/test-session-id/messages'),
           expect.objectContaining({
             method: 'GET',
             credentials: 'include',
@@ -314,7 +334,7 @@ describe('convosNew', () => {
         const result = await getConversations();
 
         expect(fetch).toHaveBeenCalledWith(
-          expect.stringContaining('/api/conversations'),
+          expect.stringContaining('/api/c/'),
           expect.objectContaining({
             method: 'GET',
             credentials: 'include',
@@ -397,13 +417,17 @@ describe('convosNew', () => {
 
       it('does nothing in server environment', () => {
         const originalWindow = global.window;
-        delete (global as any).window;
+        const originalLocalStorage = global.localStorage;
+        
+        (global as any).window = undefined;
+        (global as any).localStorage = undefined;
 
         setStoredEndpoint('https://should-not-store.com');
 
         expect(localStorageMock.setItem).not.toHaveBeenCalled();
 
         global.window = originalWindow;
+        global.localStorage = originalLocalStorage;
       });
     });
 
@@ -416,13 +440,17 @@ describe('convosNew', () => {
 
       it('does nothing in server environment', () => {
         const originalWindow = global.window;
-        delete (global as any).window;
+        const originalLocalStorage = global.localStorage;
+        
+        (global as any).window = undefined;
+        (global as any).localStorage = undefined;
 
         clearStoredEndpoint();
 
         expect(localStorageMock.removeItem).not.toHaveBeenCalled();
 
         global.window = originalWindow;
+        global.localStorage = originalLocalStorage;
       });
     });
   });

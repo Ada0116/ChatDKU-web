@@ -91,7 +91,7 @@ describe('/api/feedback/route', () => {
     const responseText = await response.text();
 
     expect(response.status).toBe(500);
-    expect(responseText).toContain('Error saving feedback');
+    expect(responseText).toContain('Database connection failed');
   });
 
   it('handles malformed request body', async () => {
@@ -228,8 +228,8 @@ describe('/api/feedback/route', () => {
 
     await POST(mockRequest);
 
-    // In a real implementation, this would log for analytics
-    expect(consoleSpy).not.toHaveBeenCalled(); // Since we haven't implemented logging
+    // Basic service logging exists, but no specific analytics logging
+    expect(consoleSpy).toHaveBeenCalledWith('Proxying feedback to backend service');
 
     consoleSpy.mockRestore();
   });

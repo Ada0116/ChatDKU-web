@@ -2,7 +2,43 @@ import { NextResponse } from 'next/server';
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
+    let body;
+    try {
+      body = await request.json();
+    } catch (parseError) {
+      return new NextResponse(JSON.stringify({ 
+        error: 'Invalid request body' 
+      }), {
+        status: 400,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+    }
+    
+    // Validate required fields
+    if (!body.userInput || !body.botAnswer || !body.feedbackReason || body.chatHistoryId === undefined || body.chatHistoryId === null) {
+      return new NextResponse(JSON.stringify({ 
+        error: 'Missing required fields' 
+      }), {
+        status: 400,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+    }
+    
+    // Validate chat history ID format
+    if (typeof body.chatHistoryId !== 'string' || body.chatHistoryId.trim() === '') {
+      return new NextResponse(JSON.stringify({ 
+        error: 'Invalid chat history ID' 
+      }), {
+        status: 400,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+    }
     
     console.log('Proxying feedback to backend service');
     
