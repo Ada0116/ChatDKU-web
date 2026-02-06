@@ -35,7 +35,8 @@ export default function AboutPage() {
 	return (
 		<div>
 			<div className="flex flex-col items-center">
-				<About />
+				{/* Without showing "Credits" button */}
+				<About showCredits={false} /> 
 				<div className="flex flex-col items-center">
 					<div className="flex items-center space-x-2">
 						<Checkbox

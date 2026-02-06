@@ -18,7 +18,12 @@ import {
 import { ArrowUpRight } from "lucide-react";
 import Image from "next/image";
 
-const About: React.FC = () => {
+type AboutProps = {
+  showCredits?: boolean;
+};
+
+const About: React.FC<AboutProps> = ({ showCredits = true }) => {
+
 	const [termsAndCondition, setTermsAndCondition] = useState(false);
 	const [remarks, setRemarks] = useState(false);
 
@@ -294,6 +299,17 @@ const About: React.FC = () => {
 							<ArrowUpRight />
 						</Button>
 					</Link>
+
+					{showCredits && (
+  						<Link href="/team-credits">
+   							<Button variant="outline" className="flex flex-row items-center">
+    							Credits
+  						 	 	<ArrowUpRight />
+  							</Button>
+ 						</Link>
+					)}
+
+
 				</div>
 			</div>
 		</>
