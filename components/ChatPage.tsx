@@ -7,6 +7,7 @@ import Cookies from "js-cookie";
 import {
 	getNewSession,
 	getCurrentSessionId,
+	clearSessionId,
 	getStoredEndpoint,
 	getSessionMessages,
 } from "@/lib/convosNew";
@@ -237,23 +238,9 @@ export default function ChatPage({ isDev = false }: ChatPageProps) {
 		};
 	}, [router]);
 
-	const handleRetrySession = useCallback(async () => {
-		setSessionError(null);
-		setIsSessionLoading(true);
-		try {
-			const newSessionId = await getNewSession();
-			if (newSessionId) {
-				setCurrentSessionId(newSessionId);
-				setChatHistoryId(newSessionId);
-			} else {
-				setSessionError("We couldn't start a chat session. Please try again.");
-			}
-		} catch (error) {
-			console.error("Error retrying session:", error);
-			setSessionError("We couldn't start a chat session. Please try again.");
-		} finally {
-			setIsSessionLoading(false);
-		}
+	const handleRetrySession = useCallback(() => {
+		clearSessionId();
+		window.location.reload();
 	}, []);
 
 	const isSessionReady =

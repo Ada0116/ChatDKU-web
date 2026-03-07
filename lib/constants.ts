@@ -1,5 +1,5 @@
-const isDevMode = process.env.NEXT_PUBLIC_DEV_MODE === 'true';
-const apiBaseUrl = isDevMode ? process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000' : 'https://chatdku.dukekunshan.edu.cn';
+const isDevMode = process.env.NODE_ENV === 'development';
+const apiBaseUrl = isDevMode ? 'http://localhost:3000' : 'https://chatdku.dukekunshan.edu.cn';
 
 export const API_ENDPOINTS = {
     USER: `${apiBaseUrl}/user`,
@@ -23,14 +23,3 @@ export const API_ENDPOINTS = {
     { id: "ant", name: "Ant Model", endpoint: API_ENDPOINTS.CHAT_DEV1 },
     { id: "qwen", name: "Qwen Model", endpoint: API_ENDPOINTS.CHAT_DEV2 },
   ] as const;
-  
-  // TODO: Move all old sample questions here below:
-  export const EXAMPLE_QUESTIONS = [
-    { emoji: "🔬", question: "Explain quantum computing principles" },
-    { emoji: "📚", question: "Summarize recent AI research papers" },
-    { emoji: "💡", question: "Help me brainstorm research ideas" },
-    { emoji: "📊", question: "Analyze this dataset for patterns" },
-    { emoji: "🧮", question: "Solve complex mathematical problems" },
-    { emoji: "🌍", question: "Discuss climate change impacts" },
-  ] as const;
-  
