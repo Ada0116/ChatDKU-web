@@ -19,6 +19,7 @@ import Side from "@/components/side";
 import { DocumentManager } from "@/components/doc-manager";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import CampusMap from "@/components/CampusMap";
 
 type ChatPageProps = {
 	isDev?: boolean;
@@ -182,6 +183,8 @@ export default function ChatPage({ isDev = false }: ChatPageProps) {
 	const [showDocumentManager, setShowDocumentManager] = useState(false);
 	const [isSessionLoading, setIsSessionLoading] = useState(true);
 	const [sessionError, setSessionError] = useState<string | null>(null);
+	const [activeView, setActiveView] = useState<"chat" | "campus">("chat");
+	const [activeReference, setActiveReference] = useState<string | null>(null);
 
 	useEffect(() => {
 		configureMarked();
@@ -355,6 +358,11 @@ export default function ChatPage({ isDev = false }: ChatPageProps) {
 	return (
 		<>
 			<Side
+				onCampusMap={() => {
+					setActiveView("campus");
+					setShowStarter(false);
+					setIsChatboxCentered(false);
+				}}
 				onDocumentManager={() => {
 					setShowDocumentManager(true);
 				}}
@@ -363,6 +371,8 @@ export default function ChatPage({ isDev = false }: ChatPageProps) {
 				currentSessionId={currentSessionId}
 				disabled={!isSessionReady}
 				onNewChat={async () => {
+					
+					setActiveView("chat");
 					setShowStarter(true);
 					setIsChatboxCentered(true);
 					setSessionError(null);
@@ -391,6 +401,7 @@ export default function ChatPage({ isDev = false }: ChatPageProps) {
 					}
 				}}
 				onConversationSelect={async (sessionId) => {
+					setActiveView("chat");
 					setShowStarter(false);
 					setIsChatboxCentered(false);
 					setCurrentSessionId(sessionId);
@@ -436,20 +447,35 @@ export default function ChatPage({ isDev = false }: ChatPageProps) {
 					<Navbar />
 				</header>
 
-				<main className="flex-1 w-full flex flex-col items-center pt-16">
-					<div
-						id="chat-log"
-						className="w-full max-w-3xl mx-auto space-y-4 p-4 pb-42 overflow-y-auto"
-					></div>
-				</main>
+				<main className="flex-1 w-full flex flex-col items-center pt-16 relative">
 
-				<div
-					className={`w-full max-w-[95vw] p-2 pt-0 transition-all duration-300 ${
-						isChatboxCentered
-							? "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
-							: "fixed bottom-0 left-1/2 -translate-x-1/2 rounded-t-3xl backdrop-blur-md md:backdrop-blur-none z-10"
-					}`}
-				>
+				{activeView === "chat" && (
+					<div
+					id="chat-log"
+					className="w-full max-w-3xl mx-auto space-y-4 p-4 pb-42 overflow-y-auto"
+					></div>
+				)}
+
+				{activeView === "campus" && (
+				<CampusMap
+					onAsk={(reference) => {
+					setActiveReference(reference); 
+					setActiveView("chat");     
+					setIsChatboxCentered(false);   
+					setInputValue("");  
+					}}
+				/>
+				)}
+
+				</main>
+				{activeView === "chat" && (
+					<div
+						className={`w-full max-w-[95vw] p-2 pt-0 transition-all duration-300 ${
+							isChatboxCentered
+								? "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+								: "fixed bottom-0 left-1/2 -translate-x-1/2 rounded-t-3xl backdrop-blur-md md:backdrop-blur-none z-10"
+						}`}
+					>
 					{showStarter && (
 						<div className="w-full flex justify-center">
 							<div className="flex flex-col items-center p-4 w-4/5 md:max-w-1/2 sm:max-w-4/5">
@@ -457,6 +483,7 @@ export default function ChatPage({ isDev = false }: ChatPageProps) {
 							</div>
 						</div>
 					)}
+					
 					<div>
 						<AIInput
 							disabled={!isSessionReady}
@@ -469,8 +496,16 @@ export default function ChatPage({ isDev = false }: ChatPageProps) {
 							}
 							onInputChange={(value) => setInputValue(value)}
 							onEndpointChange={setApiEndpoint}
+							activeReference={activeReference}
+  							onClearReference={() => setActiveReference(null)}
 							onSubmit={async (value) => {
 								if (!value.trim()) return;
+
+								let finalValue = value.trim();
+								if (activeReference) {
+									finalValue = `${activeReference}, ${finalValue}`;
+									setActiveReference(null);
+								}
 
 								setShowStarter(false);
 								setIsChatboxCentered(false);
@@ -493,7 +528,7 @@ export default function ChatPage({ isDev = false }: ChatPageProps) {
 
 								addMessageToChat(
 									"user",
-									value.trim(),
+									finalValue,
 									"bg-muted/50 dark:bg-muted/50 text-sm",
 								);
 
@@ -515,7 +550,7 @@ export default function ChatPage({ isDev = false }: ChatPageProps) {
 											method: "POST",
 											headers: { "Content-Type": "application/json" },
 											body: JSON.stringify({
-												messages: [{ role: "user", content: value }],
+												messages: [{ role: "user", content: finalValue }],
 												chatHistoryId: sessionId,
 												mode: thinkingMode ? "agent" : "",
 												searchMode: searchMode,
@@ -706,6 +741,7 @@ export default function ChatPage({ isDev = false }: ChatPageProps) {
 						</p>
 					)}
 				</div>
+				)}
 				<DocumentManager
 					open={showDocumentManager}
 					onOpenChange={setShowDocumentManager}

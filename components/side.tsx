@@ -7,6 +7,7 @@ import {
 	SquarePen,
 	MoreHorizontal,
 	Trash2,
+  Map,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import {
@@ -57,6 +58,7 @@ import {
 } from "@/components/ui/tooltip";
 
 interface SidebarProps {
+  onCampusMap: () => void;
 	onDocumentManager: () => void;
 	onEndpointChange?: (endpoint: string) => void;
 	currentSessionId?: string;
@@ -68,6 +70,7 @@ interface SidebarProps {
 }
 
 export default function Side({
+  onCampusMap,
 	onDocumentManager,
 	onEndpointChange,
 	currentSessionId,
@@ -207,6 +210,15 @@ export default function Side({
 								<SquarePen />
 								New Chat
 							</Button>
+              <Button
+                variant="inChatbox"
+                className="w-full justify-start"
+                disabled={disabled}
+                onClick={onCampusMap}
+              >
+                <Map />
+                Campus Map
+              </Button>
 
 							<div className={cn(!isDevRoute && "hidden")}>
 								<Button

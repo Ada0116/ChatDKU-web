@@ -20,6 +20,8 @@ export function AIInput({
   onThinkingModeChange,
   onEndpointChange,
   disabled = false,
+  activeReference,
+  onClearReference,
 }: {
   id?: string;
   placeholder?: string;
@@ -34,6 +36,8 @@ export function AIInput({
   onEndpointChange?: (endpoint: string) => void;
   onSearchModeChange?: (value: string) => void;
   disabled?: boolean;
+  activeReference?: string | null;
+  onClearReference?: () => void;
 }) {
   const { textareaRef, adjustHeight } = useAutoResizeTextarea({
     minHeight,
@@ -244,71 +248,96 @@ export function AIInput({
 					`}
         </style>
 
-        <div className="flex flex-row items-center">
-          <Textarea
-            autoFocus
-            id={id}
-            placeholder={!isRecording ? placeholder : "Listening..."}
-            className={cn(
-              "placeholder:text-black/40 dark:placeholder:text-white/40",
-              "text-black dark:text-white text-wrap",
-              "overflow-y-auto resize-none",
-              "focus-visible:ring-0 focus-visible:ring-offset-0",
-              "pt-2 border-none bg-transparent",
-              `min-h-[${minHeight}px] max-h-[${maxHeight}px]`,
-              "[&::-webkit-resizer]:hidden",
-            )}
-            ref={textareaRef}
-            value={inputValue}
-            onChange={(e) => {
-              if (disabled) return;
-              const newValue = e.target.value;
-              setInputValue(newValue);
-              onInputChange?.(newValue);
-              if (!newValue.trim()) {
-                adjustHeight(true);
-              } else {
-                requestAnimationFrame(() => adjustHeight());
-              }
-            }}
-            onKeyDown={(e) => {
-              if (disabled) return;
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleReset();
-              }
-            }}
-            disabled={disabled}
-          />
-          {/* <div className={cn(isDevRoute && "hidden")}> */}
-          <div>
-            <button
-              className={cn(
-                inputButtonStyle,
-                inputValue && "hidden",
-                isRecording &&
-                  "bg-red-500 border border-foreground/10 hover:mask-bg-secondary/50 text-secondary",
-              )}
-              onClick={toggleRecording}
-              disabled={disabled}
-            >
-              <Mic className="cursor-pointer w-5 h-5" />
-            </button>
+        <div className="flex flex-col">
 
-            <button
-              onClick={handleReset}
-              type="button"
+          {/* Reference*/}
+          {activeReference && (
+            <div className="flex items-center justify-between 
+                            bg-gray-200/80 dark:bg-gray-700/80 
+                            text-gray-800 dark:text-gray-100 
+                            px-3 py-1 rounded-full mb-2 mx-2 mt-2">
+
+              <span className="text-sm truncate pr-2">
+                {activeReference}
+              </span>
+
+              <button
+                className="text-black dark:text-white text-sm flex-shrink-0"
+                onClick={onClearReference}
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          {/* input area */}
+          <div className="flex flex-row items-center">
+            <Textarea
+              autoFocus
+              id={id}
+              placeholder={!isRecording ? placeholder : "Listening..."}
               className={cn(
-                inputButtonStyle,
-                inputValue
-                  ? "opacity-100 scale-100"
-                  : "hidden opacity-0 scale-50",
+                "placeholder:text-black/40 dark:placeholder:text-white/40",
+                "text-black dark:text-white text-wrap",
+                "overflow-y-auto resize-none",
+                "focus-visible:ring-0 focus-visible:ring-offset-0",
+                "pt-3 pb-2 border-none bg-transparent",
+                `min-h-[${minHeight}px] max-h-[${maxHeight}px]`,
+                "[&::-webkit-resizer]:hidden",
               )}
+              ref={textareaRef}
+              value={inputValue}
+              onChange={(e) => {
+                if (disabled) return;
+                const newValue = e.target.value;
+                setInputValue(newValue);
+                onInputChange?.(newValue);
+                if (!newValue.trim()) {
+                  adjustHeight(true);
+                } else {
+                  requestAnimationFrame(() => adjustHeight());
+                }
+              }}
+              onKeyDown={(e) => {
+                if (disabled) return;
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleReset();
+                }
+              }}
               disabled={disabled}
-            >
-              <CornerRightUp className="w-5 h-5" />
-            </button>
+            />
+
+            <div>
+              <button
+                className={cn(
+                  inputButtonStyle,
+                  inputValue && "hidden",
+                  isRecording &&
+                    "bg-red-500 border border-foreground/10 text-secondary",
+                )}
+                onClick={toggleRecording}
+                disabled={disabled}
+              >
+                <Mic className="w-5 h-5" />
+              </button>
+
+              <button
+                onClick={handleReset}
+                type="button"
+                className={cn(
+                  inputButtonStyle,
+                  inputValue
+                    ? "opacity-100 scale-100"
+                    : "hidden opacity-0 scale-50",
+                )}
+                disabled={disabled}
+              >
+                <CornerRightUp className="w-5 h-5" />
+              </button>
+            </div>
           </div>
+
         </div>
       </div>
     </div>
