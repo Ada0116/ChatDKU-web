@@ -20,6 +20,7 @@ export function AIInput({
   onThinkingModeChange,
   onEndpointChange,
   disabled = false,
+  submitDisabled = false,
 }: {
   id?: string;
   placeholder?: string;
@@ -34,6 +35,7 @@ export function AIInput({
   onEndpointChange?: (endpoint: string) => void;
   onSearchModeChange?: (value: string) => void;
   disabled?: boolean;
+  submitDisabled?: boolean;
 }) {
   const { textareaRef, adjustHeight } = useAutoResizeTextarea({
     minHeight,
@@ -202,6 +204,7 @@ export function AIInput({
 
   const handleReset = () => {
     if (disabled) return;
+    if (submitDisabled) return;
     if (!inputValue.trim()) return;
     onSubmit?.(inputValue);
     setInputValue("");
@@ -273,10 +276,13 @@ export function AIInput({
             }}
             onKeyDown={(e) => {
               if (disabled) return;
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleReset();
+              if (e.key !== "Enter") return;
+              if (e.ctrlKey || e.metaKey || e.shiftKey) {
+                return;
               }
+              e.preventDefault();
+              if (submitDisabled) return;
+              handleReset();
             }}
             disabled={disabled}
           />
@@ -304,7 +310,7 @@ export function AIInput({
                   ? "opacity-100 scale-100"
                   : "hidden opacity-0 scale-50",
               )}
-              disabled={disabled}
+              disabled={disabled || submitDisabled}
             >
               <CornerRightUp className="w-5 h-5" />
             </button>

@@ -229,6 +229,7 @@ export default function ChatPage({ isDev = false }: ChatPageProps) {
 	const [searchMode, setSearchMode] = useState("");
 	const [inputValue, setInputValue] = useState("");
 	const [apiEndpoint, setApiEndpoint] = useState(getStoredEndpoint());
+	const [isAwaitingResponse, setIsAwaitingResponse] = useState(false);
 	const router = useRouter();
 	const [showDocumentManager, setShowDocumentManager] = useState(false);
 	const [isSessionLoading, setIsSessionLoading] = useState(true);
@@ -301,6 +302,9 @@ export default function ChatPage({ isDev = false }: ChatPageProps) {
 		: sessionError
 			? "Session unavailable. Please try again."
 			: "Type your message...";
+	const inputPlaceholder = isAwaitingResponse
+		? "Waiting for the response..."
+		: sessionPlaceholder;
 
 	const handleFeedback = useCallback(
 		async (userInput: any, answer: any, reason: any) => {
@@ -510,8 +514,9 @@ export default function ChatPage({ isDev = false }: ChatPageProps) {
 					)}
 					<div>
 						<AIInput
-							disabled={!isSessionReady}
-							placeholder={sessionPlaceholder}
+							disabled={false}
+							submitDisabled={!isSessionReady || isAwaitingResponse}
+							placeholder={inputPlaceholder}
 							thinkingMode={thinkingMode}
 							onThinkingModeChange={(value) => setThinkingMode(value)}
 							searchMode={searchMode}
@@ -522,39 +527,44 @@ export default function ChatPage({ isDev = false }: ChatPageProps) {
 							onEndpointChange={setApiEndpoint}
 							onSubmit={async (value) => {
 								if (!value.trim()) return;
-
-								setShowStarter(false);
-								setIsChatboxCentered(false);
-
-								const activeSessionId =
-									currentSessionId || getCurrentSessionId() || "";
-								if (!activeSessionId) {
-									setSessionError(
-										"We couldn't find an active chat session. Please try again.",
-									);
-									return;
-								}
-
-								if (currentSessionId !== activeSessionId) {
-									setCurrentSessionId(activeSessionId);
-								}
-								if (chatHistoryId !== activeSessionId) {
-									setChatHistoryId(activeSessionId);
-								}
-
-								addMessageToChat(
-									"user",
-									value.trim(),
-									"bg-muted/50 dark:bg-muted/50 text-sm",
-								);
-
-								ensureSearchLoaderStyles();
-								const botMessage = addAssistantRawHtml(
-									getSearchLoaderHTML(),
-									"text-sm",
-								);
+								if (isAwaitingResponse) return;
+								setIsAwaitingResponse(true);
+								let botMessage: HTMLElement | null = null;
 
 								try {
+									setShowStarter(false);
+									setIsChatboxCentered(false);
+
+									const activeSessionId =
+										currentSessionId || getCurrentSessionId() || "";
+									if (!activeSessionId) {
+										setSessionError(
+											"We couldn't find an active chat session. Please try again.",
+										);
+										return;
+									}
+
+									if (currentSessionId !== activeSessionId) {
+										setCurrentSessionId(activeSessionId);
+									}
+									if (chatHistoryId !== activeSessionId) {
+										setChatHistoryId(activeSessionId);
+									}
+
+									addMessageToChat(
+										"user",
+										value.trim(),
+										"bg-muted/50 dark:bg-muted/50 text-sm",
+									);
+
+									ensureSearchLoaderStyles();
+									const rawBotMessage = addAssistantRawHtml(
+										getSearchLoaderHTML(),
+										"text-sm",
+									);
+									botMessage =
+										rawBotMessage instanceof HTMLElement ? rawBotMessage : null;
+
 									const fetchChat = async (sessionId: string) => {
 										if (value.trim().toLowerCase() === "test") {
 											return fetch("/mdtest.md");
@@ -739,6 +749,8 @@ export default function ChatPage({ isDev = false }: ChatPageProps) {
 										`Error: ${error instanceof Error ? error.message : "An unknown error occurred"}`,
 										"bg-destructive/10 dark:bg-destructive/20",
 									);
+								} finally {
+									setIsAwaitingResponse(false);
 								}
 							}}
 						/>
