@@ -20,7 +20,7 @@ cd "$SRC_DIR"
 # To ensure dependencies are installed
 npm ci --prefer-offline
 
-npm run build
+npm run build:static
 
 # Deploy
 sudo mkdir -p "$APP_DIR"

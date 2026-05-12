@@ -44,21 +44,10 @@ const parseMarkdown = (content: string): string => {
 		: cleanedContent;
 };
 
-// The format of each SSE even： { id, data: { type, stage, content } }
 type StreamEvent = {
   type: "reasoning" | "chunk" | "end";
   stage: string;
   content: string;
-};
-
-const parseStreamEvent = (line: string): StreamEvent | null => {
-	if (!line.startsWith("data: ")) return null;
-	try {
-		const jsonStr = line.slice(6); 
-		return JSON.parse(jsonStr) as StreamEvent;
-	} catch {
-		return null;
-	}
 };
 
 const parseThinkingStream = (text: string): { thinking: string; response: string } => {
@@ -848,11 +837,25 @@ export default function ChatPage({ isDev = false }: ChatPageProps) {
 
 									console.log("Step 1: POST", postUrl, postBody);
 
-									const postResponse = await fetch(postUrl, {
+									let postResponse = await fetch(postUrl, {
 										method: "POST",
 										headers: { "Content-Type": "application/json" },
 										body: JSON.stringify(postBody),
 									});
+
+									if (!postResponse.ok) {
+										const newSession = await getNewSession();
+										if (newSession) {
+											setCurrentSessionId(newSession);
+											setChatHistoryId(newSession);
+											postBody.chatHistoryId = newSession;
+											postResponse = await fetch(postUrl, {
+												method: "POST",
+												headers: { "Content-Type": "application/json" },
+												body: JSON.stringify(postBody),
+											});
+										}
+									}
 
 									if (!postResponse.ok) {
 										throw new Error(`POST failed: ${postResponse.status} ${postResponse.statusText}`);

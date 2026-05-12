@@ -12,7 +12,7 @@ RESET="\033[0m"
 
 APP_DIR="/var/www/chatdku"
 BACKUP_DIR="/var/www/chatdku_webapp_backups"
-BUILD_DIR="out"  # where `npm run build` outputs
+BUILD_DIR="out"  # where `npm run build:static` outputs
 
 # cd /path/to/frontend
 
@@ -46,7 +46,7 @@ case "$answer" in
 esac
 
 echo -e "${BLUE}${BOLD}==> Running build...${RESET}"
-npm run build
+npm run build:static
 
 timestamp="$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$BACKUP_DIR"
