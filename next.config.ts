@@ -1,10 +1,10 @@
 import type { NextConfig } from "next";
 
 const isDevMode = process.env.NODE_ENV === 'development';
+const isStaticExport = process.env.NEXT_STATIC_EXPORT === '1';
 
 const nextConfig: NextConfig = {
-  // Only use static export in production
-  ...(isDevMode ? {} : { output: 'export' }),
+  ...(isStaticExport ? { output: 'export' } : {}),
   trailingSlash: true,
   
   // Images configuration

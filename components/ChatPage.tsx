@@ -44,6 +44,12 @@ const parseMarkdown = (content: string): string => {
 		: cleanedContent;
 };
 
+type StreamEvent = {
+  type: "reasoning" | "chunk" | "end";
+  stage: string;
+  content: string;
+};
+
 const parseThinkingStream = (text: string): { thinking: string; response: string } => {
 	const lines = text.split("\n");
 	const thinkingLines: string[] = [];
@@ -69,8 +75,8 @@ const ensureThinkingBoxStyles = () => {
 	style.innerHTML = `
     .cdku-thinking-box {
       opacity: 0;
-      transform: translateY(6px);
-      transition: opacity 240ms ease-out, transform 240ms ease-out;
+      transform: translateY(4px);
+      transition: opacity 200ms ease-out, transform 200ms ease-out;
     }
     .cdku-thinking-box.tb-entered {
       opacity: 1;
@@ -78,75 +84,59 @@ const ensureThinkingBoxStyles = () => {
     }
     .cdku-thinking-box.tb-dismissing {
       opacity: 0;
-      transform: translateY(-6px);
+      transform: translateY(-4px);
     }
     @keyframes tbCursorPulse {
-      0%, 100% { opacity: 0.2; }
-      50% { opacity: 0.8; }
+      0%, 100% { opacity: 0.3; }
+      50% { opacity: 1; }
     }
     .cdku-thinking-cursor {
       display: inline-block;
-      width: 1px;
-      height: 0.8em;
-      background-color: currentColor;
+      width: 2px;
+      height: 1em;
+      background-color: #6b7280;
       margin-left: 2px;
       vertical-align: text-bottom;
-      animation: tbCursorPulse 1000ms ease-in-out infinite;
+      animation: tbCursorPulse 800ms ease-in-out infinite;
+    }
+    .tb-text {
+      color: #6b7280 !important;
+      font-weight: 500;
     }
   `;
 	document.head.appendChild(style);
 };
 
 const createThinkingBox = (
-	chatLog: HTMLElement,
-): { updateContent: (content: string) => void; dismiss: () => Promise<void> } => {
+	container: HTMLElement,
+): { updateContent: (content: string) => void; dismiss: () => void } => {
 	ensureThinkingBoxStyles();
-	const outerWrapper = document.createElement("div");
-	outerWrapper.className = "flex w-full";
-	outerWrapper.innerHTML = `
-    <div class="flex flex-col items-start w-full sm:max-w-[85%]">
-      <div class="cdku-thinking-box flex flex-col lg:flex-row gap-3 px-4 py-2 w-full">
-        <div class="flex-shrink-0">
-          <div class="w-8 h-8 rounded-full bg-transparent flex items-center justify-center">
-            <img src="/logos/new_logo.svg" class="p-1.5 opacity-60" alt="ChatDKU"/>
-          </div>
-        </div>
-        <div class="flex-1 min-w-0">
-          <div class="tb-scroll h-[120px] overflow-hidden rounded-xl px-3 py-2.5 select-none" style="background:color-mix(in srgb,var(--muted) 20%,transparent);border:1px solid color-mix(in srgb,var(--border) 30%,transparent)">
-            <p class="tb-text font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-words m-0 pointer-events-none" style="color:color-mix(in srgb,var(--muted-foreground) 55%,transparent)"><span class="cdku-thinking-cursor"></span></p>
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
-	chatLog.appendChild(outerWrapper);
-	chatLog.scrollTo(0, chatLog.scrollHeight);
-
-	const thinkingBox = outerWrapper.querySelector(".cdku-thinking-box") as HTMLElement;
-	const textEl = outerWrapper.querySelector(".tb-text") as HTMLElement;
-	const scrollEl = outerWrapper.querySelector(".tb-scroll") as HTMLElement;
+	
+	const thinkingEl = document.createElement("p");
+	thinkingEl.className = "cdku-thinking-box tb-text font-mono text-[12px] leading-relaxed whitespace-pre-wrap break-words m-0";
+	thinkingEl.style.cssText = "color:#6b7280;font-weight:500;";
+	thinkingEl.innerHTML = '<span class="cdku-thinking-cursor"></span>';
+	
+	container.appendChild(thinkingEl);
 
 	requestAnimationFrame(() => {
 		requestAnimationFrame(() => {
-			thinkingBox.classList.add("tb-entered");
+			thinkingEl.classList.add("tb-entered");
 		});
 	});
 
 	return {
 		updateContent: (content: string) => {
-			textEl.innerHTML = "";
-			textEl.appendChild(document.createTextNode(content));
+			thinkingEl.innerHTML = "";
+			thinkingEl.appendChild(document.createTextNode(content));
 			const cursor = document.createElement("span");
 			cursor.className = "cdku-thinking-cursor";
-			textEl.appendChild(cursor);
-			scrollEl.scrollTop = scrollEl.scrollHeight;
-			chatLog.scrollTo(0, chatLog.scrollHeight);
+			thinkingEl.appendChild(cursor);
 		},
-		dismiss: async () => {
-			thinkingBox.classList.remove("tb-entered");
-			thinkingBox.classList.add("tb-dismissing");
-			await new Promise((r) => setTimeout(r, 260));
-			outerWrapper.remove();
+		dismiss: () => {
+			thinkingEl.classList.remove("tb-entered");
+			thinkingEl.classList.add("tb-dismissing");
+			setTimeout(() => thinkingEl.remove(), 260);
 		},
 	};
 };
@@ -215,6 +205,128 @@ const getSearchLoaderHTML = (): string => {
       </div>
     </div>
   `;
+};
+
+
+const streamSSEFromReader = async (
+	response: Response,
+	streamContainer: HTMLElement,
+	chatLog: HTMLElement,
+): Promise<string> => {
+	if (!response.body) {
+		throw new Error("No response body");
+	}
+
+	const reader = response.body.getReader();
+	const decoder = new TextDecoder();
+	let buffer = "";
+	let fullAnswer = "";
+	let thinkingBox: ReturnType<typeof createThinkingBox> | null = null;
+
+	const contentDiv = document.createElement("div");
+	contentDiv.className =
+		"text-foreground break-words overflow-wrap-anywhere markdown-content text-[0.9375rem]";
+	streamContainer.innerHTML = "";
+	streamContainer.appendChild(contentDiv);
+
+	try {
+		while (true) {
+			const { done, value } = await reader.read();
+			if (done) break;
+
+			buffer += decoder.decode(value, { stream: true });
+
+
+			const parts = buffer.split("\n\n");
+			buffer = parts.pop() || "";
+
+			for (const part of parts) {
+				if (!part.trim()) continue;
+				console.log('SSE part:', JSON.stringify(part));
+
+
+				const lines = part.split("\n");
+				let dataLine = "";
+				for (const line of lines) {
+					if (line.startsWith("data: ")) {
+						dataLine = line.slice(6); 
+						break;
+					}
+				}
+				if (!dataLine) continue;
+				console.log('Parsed data:', dataLine);
+
+				let event: StreamEvent | null = null;
+				try {
+					event = JSON.parse(dataLine) as StreamEvent;
+				} catch {
+					continue;
+				}
+
+				const eventData = (event as any).data || event;
+				const { type, stage, content } = eventData;
+
+				if (type === "reasoning") {
+					if (!thinkingBox) {
+						thinkingBox = createThinkingBox(streamContainer);
+					}
+					const displayText = content
+						? `[${stage}] ${content}`
+						: `[${stage}]`;
+					thinkingBox.updateContent(displayText);
+				} else if (type === "chunk") {
+					if (thinkingBox) {
+						const box = thinkingBox;
+						thinkingBox = null;
+						void box.dismiss();
+					}
+					fullAnswer += content;
+					const cleaned = fullAnswer.replace(/<think>[\s\S]*?<\/think>/gi, "");
+					contentDiv.innerHTML = parseMarkdown(cleaned);
+				} else if (type === "end") {
+					if (thinkingBox) {
+						const box = thinkingBox;
+						thinkingBox = null;
+						void box.dismiss();
+					}
+				}
+			}
+
+			chatLog.scrollTo(0, chatLog.scrollHeight);
+		}
+
+		if (buffer.trim()) {
+			const lines = buffer.split("\n");
+			for (const line of lines) {
+				if (line.startsWith("data: ")) {
+					try {
+						const event = JSON.parse(line.slice(6)) as StreamEvent;
+						if (event.type === "chunk") {
+							fullAnswer += event.content;
+						}
+					} catch { /* ignore */ }
+				}
+			}
+			const cleaned = fullAnswer.replace(/<think>[\s\S]*?<\/think>/gi, "");
+			contentDiv.innerHTML = parseMarkdown(cleaned);
+		}
+
+		if (thinkingBox) {
+			const box = thinkingBox;
+			thinkingBox = null;
+			void box.dismiss();
+		}
+
+		return fullAnswer;
+	} catch (error) {
+		console.warn("SSE stream reading failed:", error);
+		if (thinkingBox) {
+			const box = thinkingBox;
+			thinkingBox = null;
+			void box.dismiss();
+		}
+		return fullAnswer || "Error: Failed to read response";
+	}
 };
 
 const streamFromReader = async (
@@ -478,7 +590,7 @@ export default function ChatPage({ isDev = false }: ChatPageProps) {
 								? ""
 								: '<div class="flex-shrink-0"><div class="w-8 h-8 rounded-full bg-transparent flex items-center justify-center"><img src="/logos/new_logo.svg" class="block dark:hidden p-1.5" alt="Logo"/><img src="/logos/new_logo.svg" class="hidden dark:block p-1.5" alt="Logo"/></div></div>'
 						}
-            <div class="${isUser ? "text-right" : "text-left"} overflow-hidden">
+            <div class="text-left overflow-hidden">
               <div class="text-foreground break-words overflow-wrap-anywhere markdown-content ${!isUser ? "text-[0.9375rem]" : ""}">${sanitizedContent}</div>
             </div>
           </div>
@@ -492,20 +604,14 @@ export default function ChatPage({ isDev = false }: ChatPageProps) {
         <div class="flex flex-col items-start w-full sm:max-w-[85%]">
           <div class="flex flex-col lg:flex-row gap-3 px-4 py-2 ${className} rounded-3xl w-full overflow-hidden">
             <div class="flex-shrink-0"><div class="w-8 h-8 rounded-full bg-transparent flex items-center justify-center"><img src="/logos/new_logo.svg" class="block dark:hidden p-1.5" alt="Logo"/><img src="/logos/new_logo.svg" class="hidden dark:block p-1.5" alt="Logo"/></div></div>
-            <div class="text-left overflow-hidden" id="stream-container">
+            <div class="text-left overflow-hidden" id="stream-container-${Date.now()}">
+              <!-- SSE stream content will be updated in real-time here -->
             </div>
           </div>
         </div>
       `;
 				chatLog?.appendChild(messageElement);
 				chatLog?.scrollTo(0, chatLog.scrollHeight);
-
-				const streamContainer = messageElement.querySelector(
-					"#stream-container",
-				) as HTMLElement;
-				if (streamContainer) {
-					streamText(content, streamContainer, isDev ? 90 : 60);
-				}
 
 				return messageElement.querySelector(".flex.flex-col");
 			}
@@ -716,37 +822,63 @@ export default function ChatPage({ isDev = false }: ChatPageProps) {
 									const rawBotMessage = addAssistantRawHtml(getSearchLoaderHTML(), "text-sm");
 									botMessage = rawBotMessage instanceof HTMLElement ? rawBotMessage : null;
 
-									const fetchChat = async (sessionId: string) => {
-										if (value.trim().toLowerCase() === "test") {
-											return fetch("/mdtest.md");
-										}
-										const url = isDev
-											? apiEndpoint
-											: "https://chatdku.dukekunshan.edu.cn/api/chat";
-										return fetch(url, {
-											method: "POST",
-											headers: { "Content-Type": "application/json" },
-											body: JSON.stringify({
-												messages: [{ role: "user", content: finalValue }],
-												chatHistoryId: sessionId,
-												mode: thinkingMode ? "agent" : "",
-												searchMode: searchMode,
-											}),
-										});
+
+									// 1. POST /api/chat → chatId
+									const postUrl = isDev
+										? apiEndpoint || "/api/chat"
+										: "/api/chat";
+
+									const postBody: Record<string, unknown> = {
+										messages: [{ role: "user", content: finalValue }],
+										chatHistoryId: activeSessionId,
 									};
+									if (thinkingMode) postBody.mode = "agent";
+									if (searchMode) postBody.searchMode = searchMode;
 
-									let response = await fetchChat(activeSessionId);
+									console.log("Step 1: POST", postUrl, postBody);
 
-									if (!response.ok) {
+									let postResponse = await fetch(postUrl, {
+										method: "POST",
+										headers: { "Content-Type": "application/json" },
+										body: JSON.stringify(postBody),
+									});
+
+									if (!postResponse.ok) {
 										const newSession = await getNewSession();
 										if (newSession) {
 											setCurrentSessionId(newSession);
 											setChatHistoryId(newSession);
-											response = await fetchChat(newSession);
+											postBody.chatHistoryId = newSession;
+											postResponse = await fetch(postUrl, {
+												method: "POST",
+												headers: { "Content-Type": "application/json" },
+												body: JSON.stringify(postBody),
+											});
 										}
 									}
 
-									if (!response.ok) throw new Error("Failed to fetch response");
+									if (!postResponse.ok) {
+										throw new Error(`POST failed: ${postResponse.status} ${postResponse.statusText}`);
+									}
+
+									const { chatId } = await postResponse.json();
+									console.log("Got chatId:", chatId);
+
+									if (!chatId) {
+										throw new Error("No chatId returned from POST /api/chat");
+									}
+
+									// 2. GET /api/chat/{chatId}?sessionId=xxx → SSE
+									const sseUrl = `/api/chat/${chatId}?sessionId=${encodeURIComponent(activeSessionId)}`;
+									console.log("Step 2: GET (SSE)", sseUrl);
+
+									const sseResponse = await fetch(sseUrl, {
+										headers: { "Accept": "text/event-stream" },
+									});
+
+									if (!sseResponse.ok) {
+										throw new Error(`SSE GET failed: ${sseResponse.status}`);
+									}
 
 									if (botMessage) {
 										botMessage.remove();
@@ -759,59 +891,18 @@ export default function ChatPage({ isDev = false }: ChatPageProps) {
 										true,
 									);
 
-									const streamContainer =
-										messageDiv?.querySelector("#stream-container");
-									if (!streamContainer)
+									const streamContainer = messageDiv?.querySelector("[id^='stream-container-']") as HTMLElement;
+									if (!streamContainer) {
 										throw new Error("Failed to create stream container");
+									}
 
-									const thinkingChatLog = document.getElementById("chat-log");
-									let thinkingBox: ReturnType<typeof createThinkingBox> | null = null;
+									const chatLog = document.getElementById("chat-log")!;
 
-									const streamResult = await streamFromReader(
-										response,
-										streamContainer as HTMLElement,
-										{
-											onThinkingContent: (content) => {
-												if (!thinkingBox && thinkingChatLog) {
-													thinkingBox = createThinkingBox(thinkingChatLog);
-												}
-												thinkingBox?.updateContent(content);
-											},
-											onResponseStart: () => {
-												if (thinkingBox) {
-													const box = thinkingBox;
-													thinkingBox = null;
-													void box.dismiss();
-												}
-											},
-										},
+									const data = await streamSSEFromReader(
+										sseResponse,
+										streamContainer,
+										chatLog,
 									);
-
-									const pendingBox = thinkingBox;
-									if (pendingBox) {
-										thinkingBox = null;
-										await pendingBox.dismiss();
-									}
-
-									let data: string;
-									if (streamResult.success) {
-										data = streamResult.text;
-									} else {
-										data = streamResult.text;
-										if (!data) {
-											try {
-												data = await response.text();
-											} catch {
-												data = "Error: Failed to read response";
-											}
-										}
-										(streamContainer as HTMLElement).innerHTML = "";
-										await streamText(
-											data,
-											streamContainer as HTMLElement,
-											isDev ? 90 : 60,
-										);
-									}
 
 									if (messageDiv) {
 										const feedbackDiv = document.createElement("div");
@@ -895,6 +986,7 @@ export default function ChatPage({ isDev = false }: ChatPageProps) {
 										messageDiv.appendChild(feedbackDiv);
 									}
 								} catch (error) {
+									console.error("Chat error:", error);
 									if (botMessage) botMessage.remove();
 									addMessageToChat(
 										"assistant",
