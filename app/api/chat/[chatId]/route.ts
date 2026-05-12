@@ -16,37 +16,51 @@ const MOCK_STREAM_EVENTS = [
   { id: "mock-13", data: { type: "end", stage: "end", content: "" } },
 ];
 
-// Receive the user message and return the chatId and sessionId
-export async function POST(request: NextRequest) {
-  const body = await request.json();
+// GET /api/chat/[chatId]?sessionId=xxx
+// SSE stream endpoint: Real-time push of Agent responses
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ chatId: string }> }
+) {
+  const { chatId } = await params;
+  const sessionId = request.nextUrl.searchParams.get('sessionId');
   const useMock = process.env.NODE_ENV === 'development' && process.env.MOCK_API !== 'false';
+
+  console.log(`GET /api/chat/${chatId}?sessionId=${sessionId}`);
 
 if (!useMock) {
     try {
-      console.log('Proxying chat request to backend...');
-      
-      const backendResponse = await fetch('http://10.200.14.82:8996/api/chat', {
-        method: 'POST',
+      const cleanChatId = chatId.replace(/\/$/, '');
+      const backendUrl = `http://10.200.14.82:8996/api/chat/${cleanChatId}?sessionId=${sessionId}`;
+      console.log('Proxying SSE from:', backendUrl);
+
+      const backendResponse = await fetch(backendUrl, {
         headers: { 
-          'Content-Type': 'application/json',
+          'Accept': 'application/json',
           'Cookie': request.headers.get('cookie') || '',
         },
-        body: JSON.stringify(body),
       });
 
-      if (!backendResponse.ok) {
+      if (!backendResponse.ok || !backendResponse.body) {
         const errorText = await backendResponse.text();
-        console.error('Backend error:', backendResponse.status, errorText);
+        console.error('Backend SSE error:', backendResponse.status, errorText);
         return NextResponse.json(
-          { error: `Backend error: ${errorText}` },
+          { error: `Backend error: ${backendResponse.status}` },
           { status: backendResponse.status }
         );
       }
 
-      const data = await backendResponse.json();
-      return NextResponse.json(data);
+      return new Response(backendResponse.body, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+        },
+      });
     } catch (error) {
-      console.error('Backend connection error:', error);
+      console.error('SSE proxy error:', error);
       return NextResponse.json(
         { error: error instanceof Error ? error.message : 'Unknown error' },
         { status: 500 }
@@ -55,13 +69,30 @@ if (!useMock) {
   }
 
   // Mock mode
-  const mockChatId = `mock-chat-${Date.now()}`;
-  const mockSessionId = body?.chatHistoryId || `mock-session-${Date.now()}`;
+  const encoder = new TextEncoder();
 
-  console.log('Mock POST /api/chat → returning chatId:', mockChatId);
+  const stream = new ReadableStream({
+    async start(controller) {
+      for (const event of MOCK_STREAM_EVENTS) {
+        const sseData = `data: ${JSON.stringify(event)}\n\n`;
+        controller.enqueue(encoder.encode(sseData));
 
-  return NextResponse.json({
-    chatId: mockChatId,
-    sessionId: mockSessionId,
+        if (event.data.type === 'reasoning') {
+          await new Promise((resolve) => setTimeout(resolve, 600));  
+        } else if (event.data.type === 'chunk') {
+          await new Promise((resolve) => setTimeout(resolve, 120));  
+        }
+      }
+      controller.close();
+      console.log('Mock SSE stream ended');
+    },
+  });
+
+  return new NextResponse(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    },
   });
 }
