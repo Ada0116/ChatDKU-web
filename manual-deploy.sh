@@ -16,27 +16,17 @@ BUILD_DIR="out"  # where `npm run build:static` outputs
 
 # cd /path/to/frontend
 
-# Parse flags
-SKIP_TESTS=false
-for arg in "$@"; do
-  case "$arg" in
-    --skip-tests)
-      SKIP_TESTS=true
-      ;;
-    *)
-      echo -e "${RED}Unknown option: $arg${RESET}"
-      exit 1
-      ;;
-  esac
-done
-
-if [ "$SKIP_TESTS" = false ]; then
+# Ask whether to run tests
+read -r -p "$(echo -e "${CYAN}Run tests? [Y/n]: ${RESET}")" run_tests
+if [ "$run_tests" = "n" ] || [ "$run_tests" = "N" ]; then
+  echo -e "${YELLOW}${BOLD}==> Skipping tests.${RESET}"
+else
   echo -e "${BLUE}${BOLD}==> Running tests...${RESET}"
   if npm run test; then
     echo -e "${GREEN}${BOLD}==> Tests passed.${RESET}"
   else
     echo -e "${RED}${BOLD}==> Tests failed.${RESET}"
-    read -r -p "$(echo -e "${YELLOW}Tests failed. Deploy anyway? [y/N]: ${RESET}")" force
+    read -r -p "$(echo -e "${YELLOW}Deploy anyway? [y/N]: ${RESET}")" force
     case "$force" in
       [Yy]* )
         echo -e "${YELLOW}${BOLD}==> Proceeding with deploy despite failing tests.${RESET}"
@@ -47,8 +37,6 @@ if [ "$SKIP_TESTS" = false ]; then
         ;;
     esac
   fi
-else
-  echo -e "${YELLOW}${BOLD}==> Skipping tests (--skip-tests).${RESET}"
 fi
 
 echo
