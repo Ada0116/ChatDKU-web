@@ -5,7 +5,10 @@
 set -euo pipefail
 
 API_DIR="app/api"
-BACKUP_DIR="app/api.static-build-backup"
+BACKUP_DIR="app/__api_dev_backup__"
+
+# Clean up any stale backup dir from a previous failed build
+rm -rf "$BACKUP_DIR"
 
 cleanup() {
   if [ -d "$BACKUP_DIR" ]; then
