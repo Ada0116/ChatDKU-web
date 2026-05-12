@@ -16,21 +16,39 @@ BUILD_DIR="out"  # where `npm run build:static` outputs
 
 # cd /path/to/frontend
 
-echo -e "${BLUE}${BOLD}==> Running tests...${RESET}"
-if npm run test; then
-  echo -e "${GREEN}${BOLD}==> Tests passed.${RESET}"
-else
-  echo -e "${RED}${BOLD}==> Tests failed.${RESET}"
-  read -r -p "$(echo -e "${YELLOW}Tests failed. Deploy anyway? [y/N]: ${RESET}")" force
-  case "$force" in
-    [Yy]* )
-      echo -e "${YELLOW}${BOLD}==> Proceeding with deploy despite failing tests.${RESET}"
+# Parse flags
+SKIP_TESTS=false
+for arg in "$@"; do
+  case "$arg" in
+    --skip-tests)
+      SKIP_TESTS=true
       ;;
-    * )
-      echo -e "${YELLOW}${BOLD}==> Aborting deploy because tests failed.${RESET}"
+    *)
+      echo -e "${RED}Unknown option: $arg${RESET}"
       exit 1
       ;;
   esac
+done
+
+if [ "$SKIP_TESTS" = false ]; then
+  echo -e "${BLUE}${BOLD}==> Running tests...${RESET}"
+  if npm run test; then
+    echo -e "${GREEN}${BOLD}==> Tests passed.${RESET}"
+  else
+    echo -e "${RED}${BOLD}==> Tests failed.${RESET}"
+    read -r -p "$(echo -e "${YELLOW}Tests failed. Deploy anyway? [y/N]: ${RESET}")" force
+    case "$force" in
+      [Yy]* )
+        echo -e "${YELLOW}${BOLD}==> Proceeding with deploy despite failing tests.${RESET}"
+        ;;
+      * )
+        echo -e "${YELLOW}${BOLD}==> Aborting deploy because tests failed.${RESET}"
+        exit 1
+        ;;
+    esac
+  fi
+else
+  echo -e "${YELLOW}${BOLD}==> Skipping tests (--skip-tests).${RESET}"
 fi
 
 echo
