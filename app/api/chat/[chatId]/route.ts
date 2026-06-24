@@ -32,7 +32,7 @@ export async function GET(
 if (!useMock) {
     try {
       const cleanChatId = chatId.replace(/\/$/, '');
-      const backendUrl = `http://10.200.14.82:8996/api/chat/${cleanChatId}?sessionId=${sessionId}`;
+      const backendUrl = `http://10.200.14.82:8999/api/chat/${cleanChatId}?sessionId=${sessionId}`;
       console.log('Proxying SSE from:', backendUrl);
 
       const backendResponse = await fetch(backendUrl, {

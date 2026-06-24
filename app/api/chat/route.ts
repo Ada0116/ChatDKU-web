@@ -9,7 +9,7 @@ if (!useMock) {
     try {
       console.log('Proxying chat request to backend...');
       
-      const backendResponse = await fetch('http://10.200.14.82:8996/api/chat', {
+      const backendResponse = await fetch('http://10.200.14.82:8999/api/chat', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
