@@ -8,10 +8,11 @@ export const API_ENDPOINTS = {
     CHAT_DEV2: `${apiBaseUrl}/dev/qwen/chat`,
     FILE_UPLOAD: `${apiBaseUrl}/user_files`,
     DICTATION_WS: isDevMode ? 'ws://localhost:8007' : 'wss://chatdku.dukekunshan.edu.cn:8007',
-    NEW_SESSION: `${apiBaseUrl}/api/get_session`,
-    CONVERSATIONS: `${apiBaseUrl}/api/c/`,
+    // Session management uses local Next.js API routes
+    NEW_SESSION: '/api/get_session',
+    CONVERSATIONS: '/api/c/',
     SESSION_MESSAGES: (sessionId: string) =>
-      `${apiBaseUrl}/api/c/${sessionId}/messages`,
+      `/api/c/${sessionId}/messages`,
   } as const;
   
   export const CHAT_MODELS = [

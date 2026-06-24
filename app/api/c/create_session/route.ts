@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
     session_id: sessionId,
   };
 
-  console.log('New session created:', sessionId);
+  console.log('New session created (create_session):', sessionId);
   return NextResponse.json(session);
 }
 
@@ -22,6 +22,6 @@ export async function POST(request: NextRequest) {
     session_id: sessionId,
   };
 
-  console.log('New session created:', sessionId);
+  console.log('New session created (create_session POST):', sessionId);
   return NextResponse.json(session);
 }
