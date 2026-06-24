@@ -51,7 +51,7 @@ export async function POST(request: Request) {
 
     console.log('Proxying feedback to backend service');
 
-    const backendUrl = 'https://10.200.14.82:9013/save-feedback';
+    const backendUrl = 'https://10.200.14.39:9013/save-feedback';
 
     const backendResponse = await fetch(backendUrl, {
       method: 'POST',

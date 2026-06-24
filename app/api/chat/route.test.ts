@@ -29,7 +29,7 @@ describe('/api/chat/route', () => {
     const responseText = await response.text();
 
     expect(fetch).toHaveBeenCalledWith(
-      'https://10.200.14.82:9015/chat',
+      'https://10.200.14.39:9015/chat',
       expect.objectContaining({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -120,7 +120,7 @@ describe('/api/chat/route', () => {
     await POST(mockRequest);
 
     expect(fetch).toHaveBeenCalledWith(
-      'https://10.200.14.82:9015/chat',
+      'https://10.200.14.39:9015/chat',
       expect.objectContaining({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
