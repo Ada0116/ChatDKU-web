@@ -39,6 +39,12 @@ export async function GET(
 ) {
   const { path } = await params;
 
+  // Handle create_session endpoint
+  if (path && path.length === 1 && path[0] === 'create_session') {
+    const sessionId = crypto.randomUUID();
+    return NextResponse.json({ session_id: sessionId });
+  }
+
   if (!path || path.length === 0) {
     return NextResponse.json(MOCK_CONVERSATIONS);
   }
@@ -46,6 +52,21 @@ export async function GET(
   if (path.length === 2 && path[1] === 'messages') {
     const sessionId = path[0];
     return NextResponse.json(MOCK_MESSAGES[sessionId] ?? []);
+  }
+
+  return NextResponse.json({ error: 'Not found' }, { status: 404 });
+}
+
+export async function POST(
+  _request: Request,
+  { params }: { params: Promise<{ path?: string[] }> }
+) {
+  const { path } = await params;
+
+  // Handle create_session endpoint
+  if (path && path.length === 1 && path[0] === 'create_session') {
+    const sessionId = crypto.randomUUID();
+    return NextResponse.json({ session_id: sessionId });
   }
 
   return NextResponse.json({ error: 'Not found' }, { status: 404 });
