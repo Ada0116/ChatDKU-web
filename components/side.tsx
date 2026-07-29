@@ -228,7 +228,7 @@ export default function Side({
 				disabled={disabled}
 				onClick={onAcademicCalendar}
 				>
-				<CalendarDays />   {/* 你需要从 lucide-react 导入 CalendarDays 图标 */}
+				<CalendarDays /> 
 				Academic Calendar
 				</Button>
 
