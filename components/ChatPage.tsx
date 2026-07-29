@@ -20,7 +20,7 @@ import { DocumentManager } from "@/components/doc-manager";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import CampusMap from "@/components/CampusMap";
-import AcademicCalendar from "@/components/AcademicCalendar";
+import AcademicCalendar from "@/components/academic-calendar";
 
 type ChatPageProps = {
 	isDev?: boolean;
