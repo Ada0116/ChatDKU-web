@@ -56,9 +56,11 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { CalendarDays } from "lucide-react";
 
 interface SidebarProps {
   onCampusMap: () => void;
+  onAcademicCalendar: () => void;
 	onDocumentManager: () => void;
 	onEndpointChange?: (endpoint: string) => void;
 	currentSessionId?: string;
@@ -71,6 +73,7 @@ interface SidebarProps {
 
 export default function Side({
   onCampusMap,
+  onAcademicCalendar,
 	onDocumentManager,
 	onEndpointChange,
 	currentSessionId,
@@ -219,6 +222,15 @@ export default function Side({
                 <Map />
                 Campus Resources
               </Button>
+			  <Button
+				variant="inChatbox"
+				className="w-full justify-start"
+				disabled={disabled}
+				onClick={onAcademicCalendar}
+				>
+				<CalendarDays /> 
+				Academic Calendar
+				</Button>
 
 							<div className={cn(!isDevRoute && "hidden")}>
 								<Button
