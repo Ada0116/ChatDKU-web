@@ -1,84 +1,67 @@
-import { NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { backendFetch, backendUnreachable, relayResponse, useMockApi } from '@/lib/server/backend';
+import {
+  mockCreateSession,
+  mockDeleteSession,
+  mockRenameSession,
+  mockSessionMessages,
+  mockSessions,
+} from '@/lib/mocks/sessions';
 
-const MOCK_CONVERSATIONS = [
-  { id: 'mock-session-1', title: 'What are the components to a signature work proposal?', created_at: '2025-01-15T10:30:00.000Z' },
-  { id: 'mock-session-2', title: 'Do I earn credits from Miniterm?', created_at: '2025-01-14T14:20:00.000Z' },
-  { id: 'mock-session-3', title: 'Academic writing tips for research papers', created_at: '2025-01-13T09:15:00.000Z' },
-];
+// Proxies Django's SessionViewSet (router-registered at /api/c/):
+//   GET    /api/c/                 list sessions        -> [{ id, title, created_at }]
+//   GET    /api/c/create_session/  new session          -> 201 { session_id }
+//   GET    /api/c/{id}/messages/   session transcript   -> [{ id, role, message, created_at }]
+//   PATCH  /api/c/{id}/rename/     rename               -> { id, title }
+//   DELETE /api/c/{id}/            delete               -> 204
 
-const MOCK_MESSAGES: Record<string, { role: string; content: string; timestamp: string }[]> = {
-  'mock-session-1': [
-    { role: 'user', content: 'What are the components to a signature work proposal?', timestamp: '2025-01-15T10:30:00.000Z' },
-    { role: 'bot', content: "The Signature Work Project Proposal (SWPP) is a critical, binding document that outlines the scope, objectives, and structure of a student's Signature Work (SW) project. It serves as the formal plan for the student's independent scholarly or creative endeavor and must be submitted and approved before the start of the senior year.", timestamp: '2025-01-15T10:30:05.000Z' },
-    { role: 'user', content: 'Can I change my sig work proposal afterward?', timestamp: '2025-01-15T10:31:00.000Z' },
-    { role: 'bot', content: 'The Signature Work Project Proposal (SWPP) is a binding document, and once submitted and approved, it cannot be revised without a formal exception request.', timestamp: '2025-01-15T10:31:08.000Z' },
-  ],
-  'mock-session-2': [
-    { role: 'user', content: 'Do I earn credits from Miniterm?', timestamp: '2025-01-14T14:20:00.000Z' },
-    { role: 'bot', content: 'No, Miniterm courses at Duke Kunshan University (DKU) do not provide academic credits. Miniterm is a one-week, non-credit, non-graded intensive course that is required for all DKU undergraduates as part of their graduation requirements. It is designed to offer students an exploratory or signature work-focused experience, but it does not count toward the 136 total credits needed for graduation.', timestamp: '2025-01-14T14:20:06.000Z' },
-  ],
-  'mock-session-3': [
-    { role: 'user', content: 'How do I write a good research paper?', timestamp: '2025-01-13T09:15:00.000Z' },
-    { role: 'bot', content: 'A strong research paper has a clear thesis, well-structured arguments, proper citations, and a concise abstract. Start with an outline before writing.', timestamp: '2025-01-13T09:15:07.000Z' },
-  ],
-};
+type RouteContext = { params: Promise<{ path?: string[] }> };
 
-export function generateStaticParams() {
-  return [
-    { path: ['mock-session-1', 'messages'] },
-    { path: ['mock-session-2', 'messages'] },
-    { path: ['mock-session-3', 'messages'] },
-  ];
+/** Django's router expects a trailing slash on every one of these routes. */
+function backendPath(segments: string[]): string {
+  return segments.length === 0 ? '/api/c/' : `/api/c/${segments.join('/')}/`;
 }
 
-export async function GET(
-  _request: Request,
-  { params }: { params: Promise<{ path?: string[] }> },
-) {
-  const { path } = await params;
-
-  // Handle create_session endpoint
-  if (path && path.length === 1 && path[0] === 'create_session') {
-    const sessionId = crypto.randomUUID();
-    return NextResponse.json({ session_id: sessionId });
+async function proxy(request: NextRequest, context: RouteContext, method: string, body?: unknown) {
+  const { path = [] } = await context.params;
+  try {
+    const response = await backendFetch(request, backendPath(path), { method, body });
+    return relayResponse(response);
+  } catch (error) {
+    return backendUnreachable(`api/c ${method}`, error);
   }
-
-  if (!path || path.length === 0) {
-    return NextResponse.json(MOCK_CONVERSATIONS);
-  }
-
-  if (path.length === 2 && path[1] === 'messages') {
-    const sessionId = path[0];
-    return NextResponse.json(MOCK_MESSAGES[sessionId] ?? []);
-  }
-
-  return NextResponse.json({ error: 'Not found' }, { status: 404 });
 }
 
-export async function POST(
-  _request: Request,
-  { params }: { params: Promise<{ path?: string[] }> }
-) {
-  const { path } = await params;
+export async function GET(request: NextRequest, context: RouteContext) {
+  const { path = [] } = await context.params;
 
-  // Handle create_session endpoint
-  if (path && path.length === 1 && path[0] === 'create_session') {
-    const sessionId = crypto.randomUUID();
-    return NextResponse.json({ session_id: sessionId });
+  if (useMockApi()) {
+    if (path[0] === 'create_session') return Response.json(mockCreateSession(), { status: 201 });
+    if (path.length === 0) return Response.json(mockSessions());
+    if (path[1] === 'messages') return Response.json(mockSessionMessages(path[0]));
+    return Response.json({ detail: 'Not found.' }, { status: 404 });
   }
 
-  return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  return proxy(request, context, 'GET');
 }
 
-export async function DELETE(
-  _request: Request,
-  { params }: { params: Promise<{ path?: string[] }> }
-) {
-  const { path } = await params;
+export async function PATCH(request: NextRequest, context: RouteContext) {
+  const body = await request.json().catch(() => ({}));
 
-  const sessionId = path?.[0];
+  if (useMockApi()) {
+    const { path = [] } = await context.params;
+    return Response.json(mockRenameSession(path[0], body?.title));
+  }
 
-  console.log("Mock delete session:", sessionId);
+  return proxy(request, context, 'PATCH', body);
+}
 
-  return Response.json({ deleted: sessionId });
+export async function DELETE(request: NextRequest, context: RouteContext) {
+  if (useMockApi()) {
+    const { path = [] } = await context.params;
+    mockDeleteSession(path[0]);
+    return new Response(null, { status: 204 });
+  }
+
+  return proxy(request, context, 'DELETE');
 }

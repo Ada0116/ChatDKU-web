@@ -1,89 +1,32 @@
-import { NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { backendFetch, backendUnreachable, relayResponse, useMockApi } from '@/lib/server/backend';
 
-export async function POST(request: Request) {
+// POST /api/feedback -> Django chat.views.FeedbackView
+// Body: { userInput, botAnswer, feedbackReason, chatHistoryId } -> 201 { message }
+export async function POST(request: NextRequest) {
+  const body = await request.json().catch(() => null);
+
+  if (body === null) {
+    return Response.json({ error: 'Invalid request body' }, { status: 400 });
+  }
+
+  if (!body.userInput || !body.botAnswer || !body.feedbackReason || !body.chatHistoryId) {
+    return Response.json({ error: 'Missing required fields' }, { status: 400 });
+  }
+
+  if (typeof body.chatHistoryId !== 'string' || body.chatHistoryId.trim() === '') {
+    return Response.json({ error: 'Invalid chat history ID' }, { status: 400 });
+  }
+
+  if (useMockApi()) {
+    console.log('[mock] Feedback received:', body.feedbackReason);
+    return Response.json({ message: 'Feedback saved successfully' }, { status: 201 });
+  }
+
   try {
-    let body;
-    try {
-      body = await request.json();
-    } catch (parseError) {
-      return new NextResponse(JSON.stringify({ 
-        error: 'Invalid request body' 
-      }), {
-        status: 400,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-    }
-    
-    // Validate required fields
-    if (!body.userInput || !body.botAnswer || !body.feedbackReason || body.chatHistoryId === undefined || body.chatHistoryId === null) {
-      return new NextResponse(JSON.stringify({ 
-        error: 'Missing required fields' 
-      }), {
-        status: 400,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-    }
-    
-    // Validate chat history ID format
-    if (typeof body.chatHistoryId !== 'string' || body.chatHistoryId.trim() === '') {
-      return new NextResponse(JSON.stringify({ 
-        error: 'Invalid chat history ID' 
-      }), {
-        status: 400,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-    }
-    
-    const useMock = process.env.NODE_ENV === 'development' && process.env.MOCK_API !== 'false';
-    if (useMock) {
-      console.log('[mock] Feedback received:', body.feedbackReason);
-      return new NextResponse(JSON.stringify({ success: true }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    console.log('Proxying feedback to backend service');
-
-    const backendUrl = 'https://10.200.14.39:9013/save-feedback';
-
-    const backendResponse = await fetch(backendUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    });
-
-    if (!backendResponse.ok) {
-      console.error(`Backend feedback error: ${backendResponse.status}`);
-      return new NextResponse(`Error from backend: ${backendResponse.statusText}`, {
-        status: backendResponse.status,
-      });
-    }
-
-    return new NextResponse(JSON.stringify({ success: true }), {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
+    const response = await backendFetch(request, '/api/feedback', { method: 'POST', body });
+    return relayResponse(response);
   } catch (error) {
-    console.error('Error proxying feedback to backend:', error);
-    return new NextResponse(JSON.stringify({ 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Unknown error' 
-    }), {
-      status: 500,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
+    return backendUnreachable('api/feedback', error);
   }
 }
