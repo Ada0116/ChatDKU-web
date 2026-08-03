@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server';
 
-export const dynamic = 'force-static';
-
 const MOCK_CONVERSATIONS = [
   { id: 'mock-session-1', title: 'What are the components to a signature work proposal?', created_at: '2025-01-15T10:30:00.000Z' },
   { id: 'mock-session-2', title: 'Do I earn credits from Miniterm?', created_at: '2025-01-14T14:20:00.000Z' },
