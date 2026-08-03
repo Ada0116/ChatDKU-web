@@ -5,7 +5,7 @@ import { POST } from './route';
 // Proxy onto Django's FeedbackView, which stores
 // { userInput, botAnswer, feedbackReason, chatHistoryId }.
 
-const BACKEND = 'http://10.200.14.39:8999';
+const BACKEND = 'http://127.0.0.1:8009';
 const mockFetch = vi.fn();
 
 const valid = {

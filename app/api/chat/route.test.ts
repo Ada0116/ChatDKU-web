@@ -6,7 +6,7 @@ import { GET } from './[chatId]/route';
 // These handlers proxy Django's Chat and ChatStream views. NODE_ENV is
 // "test" here, so isMockApi() is false and every call goes to the backend.
 
-const BACKEND = 'http://10.200.14.39:8999';
+const BACKEND = 'http://127.0.0.1:8009';
 const mockFetch = vi.fn();
 
 const post = (body: unknown, headers: Record<string, string> = {}) =>

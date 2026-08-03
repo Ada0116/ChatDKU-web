@@ -5,7 +5,7 @@ import { DELETE, GET, PATCH } from './[[...path]]/route';
 // Proxy onto Django's SessionViewSet. Every backend path it builds must carry
 // the router's trailing slash.
 
-const BACKEND = 'http://10.200.14.39:8999';
+const BACKEND = 'http://127.0.0.1:8009';
 const mockFetch = vi.fn();
 
 const context = (path?: string[]) => ({ params: Promise.resolve({ path }) });

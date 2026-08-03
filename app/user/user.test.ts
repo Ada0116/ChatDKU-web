@@ -6,7 +6,7 @@ import { GET as listUploads, POST as upload } from './upload/route';
 // Proxies onto Django's core app: HealthView at /user/ and UploadView at
 // /user/upload.
 
-const BACKEND = 'http://10.200.14.39:8999';
+const BACKEND = 'http://127.0.0.1:8009';
 const mockFetch = vi.fn();
 
 const request = (url: string, init: RequestInit = {}) =>

@@ -39,7 +39,7 @@ vi.mock('@/components/CampusMap', () => ({ __esModule: true, default: () => <div
 vi.mock('@/components/academic-calendar', () => ({ __esModule: true, default: () => <div /> }));
 
 const SESSION = '08d8d518-bc9a-4f25-8e1a-8b6f3264f59b';
-const BACKEND = 'http://10.200.14.39:8999';
+const BACKEND = 'http://127.0.0.1:8009';
 
 /** Requests the stubbed Django server received, in order. */
 let backendCalls: { method: string; url: string; body?: string }[] = [];
