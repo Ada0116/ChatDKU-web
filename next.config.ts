@@ -1,13 +1,12 @@
 import type { NextConfig } from "next";
 
 const isDevMode = process.env.NODE_ENV === 'development';
-const isStaticExport = process.env.NEXT_STATIC_EXPORT === '1';
 
 const nextConfig: NextConfig = {
-  ...(isStaticExport ? { output: 'export' } : {}),
   trailingSlash: true,
-  
-  // Images configuration
+
+  // Carried over from the old static export. Turning optimization back on
+  // requires `sharp` to be installed on the server.
   images: {
     unoptimized: true,
   },
