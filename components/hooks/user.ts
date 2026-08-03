@@ -1,21 +1,23 @@
-export async function getUser() {
-  const res = await fetch("/dev/ant/user", { credentials: "include" });
-  if (!res.ok) return null;
-  return res.json() as Promise<{ eppn: string; displayName: string }>;
-}
-
 import { API_ENDPOINTS } from "@/lib/constants";
 
+// Client for Django's core app:
+//   GET  /user/       -> { netid, username, role }          (core.views.HealthView)
+//   GET  /user/upload -> { netid, document: string[] }      (core.views.UploadView)
+//   POST /user/upload -> multipart field `file_` -> { message }
+//
+// There is no delete endpoint on UploadView — see deleteDocument below.
+
 export interface UserProfile {
+  netid: string;
   name: string;
-  profile: string;
+  role: string;
 }
 
 export interface UploadedDocument {
+  /** UploadView identifies documents by filename; there are no numeric ids. */
   id: string;
   filename: string;
-  uploadedAt: Date;
-  size: number;
+  uploadedAt?: Date;
 }
 
 export class UserAPI {
@@ -27,46 +29,26 @@ export class UserAPI {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to fetch user profile");
+        throw new Error(`Failed to fetch user profile: ${response.status}`);
       }
 
       const data = await response.json();
       return {
-        name: data.name || data.username || "User",
-        profile: data.profile || "",
+        netid: data.netid ?? "",
+        name: data.username || "User",
+        role: data.role ?? "",
       };
     } catch (error) {
       console.error("Error fetching user profile:", error);
-      return {
-        name: "User",
-        profile: "",
-      };
-    }
-  }
-
-  async updateUserProfile(profile: string): Promise<boolean> {
-    try {
-      // TODO: Replace endpoint with a real new profile update API, instead of the /user API.
-      const response = await fetch(API_ENDPOINTS.USER, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({ profile }),
-      });
-
-      return response.ok;
-    } catch (error) {
-      console.error("Error updating user profile:", error);
-      return false;
+      return { netid: "", name: "User", role: "" };
     }
   }
 
   async uploadDocument(file: File): Promise<UploadedDocument | null> {
     try {
       const formData = new FormData();
-      formData.append("file", file);
+      // UploadView's serializer field is `file_`, and it only accepts PDFs <=10MB.
+      formData.append("file_", file);
 
       const response = await fetch(API_ENDPOINTS.FILE_UPLOAD, {
         method: "POST",
@@ -75,16 +57,11 @@ export class UserAPI {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to upload document");
+        throw new Error(`Failed to upload document: ${response.status}`);
       }
 
-      const data = await response.json();
-      return {
-        id: data.id || Date.now().toString(),
-        filename: file.name,
-        uploadedAt: new Date(),
-        size: file.size,
-      };
+      // The backend responds with { message } only, so the row is built locally.
+      return { id: file.name, filename: file.name, uploadedAt: new Date() };
     } catch (error) {
       console.error("Error uploading document:", error);
       return null;
@@ -99,37 +76,24 @@ export class UserAPI {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to fetch documents");
+        throw new Error(`Failed to fetch documents: ${response.status}`);
       }
 
       const data = await response.json();
-      return data.map((doc: any) => ({
-        id: doc.id,
-        filename: doc.filename || doc.name,
-        uploadedAt: new Date(doc.uploaded_at || doc.createdAt),
-        size: doc.size || 0,
-      }));
+      const filenames: string[] = Array.isArray(data?.document) ? data.document : [];
+      return filenames.map((filename) => ({ id: filename, filename }));
     } catch (error) {
       console.error("Error fetching documents:", error);
       return [];
     }
   }
 
-  async deleteDocument(documentId: string): Promise<boolean> {
-    try {
-      const response = await fetch(
-        `${API_ENDPOINTS.FILE_UPLOAD}/${documentId}`,
-        {
-          method: "DELETE",
-          credentials: "include",
-        },
-      );
-
-      return response.ok;
-    } catch (error) {
-      console.error("Error deleting document:", error);
-      return false;
-    }
+  /**
+   * Not supported: core.views.UploadView exposes GET and POST only, so there is
+   * no way to remove an uploaded document from the client yet.
+   */
+  async deleteDocument(_documentId: string): Promise<never> {
+    throw new Error("Deleting uploads is not supported by the backend yet");
   }
 }
 

@@ -21,6 +21,7 @@ import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import CampusMap from "@/components/CampusMap";
 import AcademicCalendar from "@/components/academic-calendar";
+import { API_ENDPOINTS } from "@/lib/constants";
 
 type ChatPageProps = {
 	isDev?: boolean;
@@ -45,10 +46,13 @@ const parseMarkdown = (content: string): string => {
 		: cleanedContent;
 };
 
+// Agent payloads as emitted by chatdku.core.intermediate_tracing.EventStream and
+// relayed by Django's ChatStream view.
 type StreamEvent = {
-  type: "reasoning" | "chunk" | "error" | "end";
-  stage: string;
-  content: string;
+  type: "reasoning" | "chunk" | "chunk_batch" | "error" | "end";
+  stage?: string;
+  content?: string;
+  chunks?: { content?: string }[];
 };
 
 const parseThinkingStream = (text: string): { thinking: string; response: string } => {
@@ -230,6 +234,74 @@ const streamSSEFromReader = async (
 	streamContainer.innerHTML = "";
 	streamContainer.appendChild(contentDiv);
 
+	const dismissThinkingBox = () => {
+		if (!thinkingBox) return;
+		const box = thinkingBox;
+		thinkingBox = null;
+		void box.dismiss();
+	};
+
+	const renderAnswer = () => {
+		const cleaned = fullAnswer.replace(/<think>[\s\S]*?<\/think>/gi, "");
+		contentDiv.innerHTML = parseMarkdown(cleaned);
+	};
+
+	const handleEvent = (event: StreamEvent) => {
+		switch (event.type) {
+			case "reasoning":
+				if (!thinkingBox) thinkingBox = createThinkingBox(streamContainer);
+				thinkingBox.updateContent(
+					event.content ? `[${event.stage}] ${event.content}` : `[${event.stage}]`,
+				);
+				break;
+			case "chunk":
+				dismissThinkingBox();
+				fullAnswer += event.content ?? "";
+				renderAnswer();
+				break;
+			// Django unpacks chunk_batch into individual chunks, but the agent's
+			// EventStream emits the batch — handle it in case we ever read direct.
+			case "chunk_batch":
+				dismissThinkingBox();
+				for (const chunk of event.chunks ?? []) {
+					fullAnswer += chunk.content ?? "";
+				}
+				renderAnswer();
+				break;
+			case "error":
+				dismissThinkingBox();
+				console.error("Agent stream error:", event.content);
+				if (!fullAnswer) {
+					contentDiv.textContent =
+						"Something went wrong while generating a response. Please try again.";
+				}
+				break;
+			case "end":
+				dismissThinkingBox();
+				break;
+		}
+	};
+
+	// One SSE frame: optional `id:` line, one `data:` line, blank-line terminated.
+	// Lone ":" frames are Django's heartbeats.
+	const handleFrame = (frame: string) => {
+		if (!frame.trim()) return;
+		const dataLine = frame.split("\n").find((line) => line.startsWith("data: "));
+		if (!dataLine) return;
+
+		let parsed: unknown;
+		try {
+			parsed = JSON.parse(dataLine.slice(6));
+		} catch {
+			return;
+		}
+
+		// The mock stream wraps payloads as { id, data }; Django sends them bare.
+		const event = ((parsed as { data?: StreamEvent })?.data ??
+			parsed) as StreamEvent;
+		if (event?.type) handleEvent(event);
+	};
+
 	try {
 		while (true) {
 			const { done, value } = await reader.read();
@@ -237,106 +309,22 @@ const streamSSEFromReader = async (
 
 			buffer += decoder.decode(value, { stream: true });
 
-
-			const parts = buffer.split("\n\n");
-			buffer = parts.pop() || "";
-
-			for (const part of parts) {
-				if (!part.trim()) continue;
-				console.log('SSE part:', JSON.stringify(part));
-
-
-				const lines = part.split("\n");
-				let dataLine = "";
-				for (const line of lines) {
-					if (line.startsWith("data: ")) {
-						dataLine = line.slice(6); 
-						break;
-					}
-				}
-				if (!dataLine) continue;
-				console.log('Parsed data:', dataLine);
-
-				let event: StreamEvent | null = null;
-				try {
-					event = JSON.parse(dataLine) as StreamEvent;
-				} catch {
-					continue;
-				}
-
-				const eventData = (event as any).data || event;
-				const { type, stage, content } = eventData;
-
-				if (type === "reasoning") {
-					if (!thinkingBox) {
-						thinkingBox = createThinkingBox(streamContainer);
-					}
-					const displayText = content
-						? `[${stage}] ${content}`
-						: `[${stage}]`;
-					thinkingBox.updateContent(displayText);
-				} else if (type === "chunk") {
-					if (thinkingBox) {
-						const box = thinkingBox;
-						thinkingBox = null;
-						void box.dismiss();
-					}
-					fullAnswer += content;
-					const cleaned = fullAnswer.replace(/<think>[\s\S]*?<\/think>/gi, "");
-					contentDiv.innerHTML = parseMarkdown(cleaned);
-				} else if (type === "error") {
-					if (thinkingBox) {
-						const box = thinkingBox;
-						thinkingBox = null;
-						void box.dismiss();
-					}
-					console.error("Agent stream error:", content);
-					if (!fullAnswer) {
-						contentDiv.textContent =
-							"Something went wrong while generating a response. Please try again.";
-					}
-				} else if (type === "end") {
-					if (thinkingBox) {
-						const box = thinkingBox;
-						thinkingBox = null;
-						void box.dismiss();
-					}
-				}
-			}
+			const frames = buffer.split("\n\n");
+			buffer = frames.pop() || "";
+			frames.forEach(handleFrame);
 
 			chatLog.scrollTo(0, chatLog.scrollHeight);
 		}
 
-		if (buffer.trim()) {
-			const lines = buffer.split("\n");
-			for (const line of lines) {
-				if (line.startsWith("data: ")) {
-					try {
-						const event = JSON.parse(line.slice(6)) as StreamEvent;
-						if (event.type === "chunk") {
-							fullAnswer += event.content;
-						}
-					} catch { /* ignore */ }
-				}
-			}
-			const cleaned = fullAnswer.replace(/<think>[\s\S]*?<\/think>/gi, "");
-			contentDiv.innerHTML = parseMarkdown(cleaned);
-		}
+		// A stream that ends without a trailing blank line leaves one frame behind.
+		buffer += decoder.decode();
+		handleFrame(buffer);
 
-		if (thinkingBox) {
-			const box = thinkingBox;
-			thinkingBox = null;
-			void box.dismiss();
-		}
-
+		dismissThinkingBox();
 		return fullAnswer;
 	} catch (error) {
 		console.warn("SSE stream reading failed:", error);
-		if (thinkingBox) {
-			const box = thinkingBox;
-			thinkingBox = null;
-			void box.dismiss();
-		}
+		dismissThinkingBox();
 		return fullAnswer || "Error: Failed to read response";
 	}
 };
@@ -559,8 +547,9 @@ export default function ChatPage({ isDev = false }: ChatPageProps) {
 	const handleFeedback = useCallback(
 		async (userInput: any, answer: any, reason: any) => {
 			try {
-				await fetch("/api/feedback", {
+				await fetch(API_ENDPOINTS.FEEDBACK, {
 					method: "POST",
+					credentials: "include",
 					headers: {
 						"Content-Type": "application/json",
 					},
@@ -845,37 +834,40 @@ export default function ChatPage({ isDev = false }: ChatPageProps) {
 									botMessage = rawBotMessage instanceof HTMLElement ? rawBotMessage : null;
 
 
-									// 1. POST /api/chat → chatId
+									// 1. POST /api/chat → { chatId, sessionId }
 									const postUrl = isDev
-										? apiEndpoint || "/api/chat"
-										: "/api/chat";
+										? apiEndpoint || API_ENDPOINTS.CHAT
+										: API_ENDPOINTS.CHAT;
 
 									const postBody: Record<string, unknown> = {
 										messages: [{ role: "user", content: finalValue }],
 										chatHistoryId: activeSessionId,
+										// Chat.post reads mode to size the agent's iteration budget.
+										mode: thinkingMode ? "agent" : "default",
 									};
-									if (thinkingMode) postBody.mode = "agent";
-									if (searchMode) postBody.searchMode = searchMode;
+									// SourceSerializer takes a list of document names; "ChatDKU" is
+									// the default corpus, anything alongside it searches both.
+									if (searchMode) postBody.sources = ["ChatDKU", searchMode];
 
-									console.log("Step 1: POST", postUrl, postBody);
+									const postChat = (body: Record<string, unknown>) =>
+										fetch(postUrl, {
+											method: "POST",
+											credentials: "include",
+											headers: { "Content-Type": "application/json" },
+											body: JSON.stringify(body),
+										});
 
-									let postResponse = await fetch(postUrl, {
-										method: "POST",
-										headers: { "Content-Type": "application/json" },
-										body: JSON.stringify(postBody),
-									});
+									let postResponse = await postChat(postBody);
 
+									// A session the backend does not recognise is rejected up front,
+									// so mint a fresh one and retry that turn against it.
 									if (!postResponse.ok) {
 										const newSession = await getNewSession();
 										if (newSession) {
 											setCurrentSessionId(newSession);
 											setChatHistoryId(newSession);
 											postBody.chatHistoryId = newSession;
-											postResponse = await fetch(postUrl, {
-												method: "POST",
-												headers: { "Content-Type": "application/json" },
-												body: JSON.stringify(postBody),
-											});
+											postResponse = await postChat(postBody);
 										}
 									}
 
@@ -883,20 +875,25 @@ export default function ChatPage({ isDev = false }: ChatPageProps) {
 										throw new Error(`POST failed: ${postResponse.status} ${postResponse.statusText}`);
 									}
 
-									const { chatId } = await postResponse.json();
-									console.log("Got chatId:", chatId);
+									const { chatId, sessionId } = await postResponse.json();
 
 									if (!chatId) {
 										throw new Error("No chatId returned from POST /api/chat");
 									}
 
-									// 2. GET /api/chat/{chatId}?sessionId=xxx → SSE
-									const sseUrl = `/api/chat/${chatId}?sessionId=${encodeURIComponent(activeSessionId)}`;
-									console.log("Step 2: GET (SSE)", sseUrl);
+									// 2. GET /api/chat/{chatId}?sessionId=… → SSE. Use the session the
+									// backend echoed back, which is the one the retry above may have
+									// swapped in.
+									const streamSessionId =
+										sessionId || (postBody.chatHistoryId as string) || activeSessionId;
 
-									const sseResponse = await fetch(sseUrl, {
-										headers: { "Accept": "text/event-stream" },
-									});
+									const sseResponse = await fetch(
+										API_ENDPOINTS.CHAT_STREAM(chatId, streamSessionId),
+										{
+											credentials: "include",
+											headers: { Accept: "text/event-stream" },
+										},
+									);
 
 									if (!sseResponse.ok) {
 										throw new Error(`SSE GET failed: ${sseResponse.status}`);
