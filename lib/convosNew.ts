@@ -1,6 +1,10 @@
 import { API_ENDPOINTS } from "./constants";
 
-// Session management utilities
+// Session + conversation client for Django's SessionViewSet.
+// Wire shapes (chat/serializer.py):
+//   session -> { id, title, created_at }
+//   message -> { id, role: "user" | "bot", message, created_at }
+
 const SESSION_STORAGE_KEY = "chatdku_session_id";
 const ENDPOINT_STORAGE_KEY = "chatdku_api_endpoint";
 
@@ -9,9 +13,9 @@ export interface SessionResponse {
 }
 
 export interface Message {
-	role: "Bot" | "User";
+	role: "user" | "assistant";
 	content: string;
-	timestamp: string;
+	timestamp?: string;
 }
 
 export interface Convo {
@@ -20,15 +24,24 @@ export interface Convo {
 	created_at: Date;
 }
 
-interface RawConversation {
+interface RawSession {
 	id: string;
 	title?: string;
 	created_at: string;
 }
 
-/**
- * Get a new session from the backend
- */
+interface RawMessage {
+	id?: number;
+	role?: string;
+	message?: string;
+	created_at?: string;
+}
+
+const jsonRequest: RequestInit = {
+	credentials: "include",
+	headers: { "Content-Type": "application/json" },
+};
+
 function setCookie(name: string, value: string, days = 1) {
 	if (typeof document === "undefined") return;
 	const expires = new Date(Date.now() + days * 864e5).toUTCString();
@@ -49,19 +62,21 @@ function deleteCookie(name: string) {
 	document.cookie = `${encodeURIComponent(name)}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
 }
 
+/**
+ * Creates a session row for the authenticated user and remembers its id.
+ * The id has to come from the backend — POST /api/chat rejects any
+ * chatHistoryId that does not already belong to the caller.
+ */
 export async function getNewSession(): Promise<string | null> {
 	try {
 		const response = await fetch(API_ENDPOINTS.NEW_SESSION, {
 			method: "GET",
-			credentials: "include",
-			headers: {
-				"Content-Type": "application/json",
-			},
+			...jsonRequest,
 		});
 
 		if (!response.ok) {
 			console.error(
-				"Failed to get new session:",
+				"Failed to create session:",
 				response.status,
 				response.statusText,
 			);
@@ -72,14 +87,12 @@ export async function getNewSession(): Promise<string | null> {
 		const sessionId = data.session_id;
 
 		if (sessionId) {
-			// Store session_id in localStorage
 			setCookie(SESSION_STORAGE_KEY, sessionId);
-			console.log("New session created and stored:", sessionId);
 		}
 
-		return sessionId;
+		return sessionId ?? null;
 	} catch (error) {
-		console.error("Error getting new session:", error);
+		console.error("Error creating session:", error);
 		return null;
 	}
 }
@@ -109,7 +122,7 @@ export function clearSessionId(): void {
 }
 
 /**
- * Get session messages from the backend
+ * Get the transcript of a session, oldest message first.
  */
 export async function getSessionMessages(
 	sessionId: string,
@@ -117,10 +130,7 @@ export async function getSessionMessages(
 	try {
 		const response = await fetch(API_ENDPOINTS.SESSION_MESSAGES(sessionId), {
 			method: "GET",
-			credentials: "include",
-			headers: {
-				"Content-Type": "application/json",
-			},
+			...jsonRequest,
 		});
 
 		if (!response.ok) {
@@ -132,41 +142,15 @@ export async function getSessionMessages(
 			return [];
 		}
 
-		const data = await response.json();
+		const data: unknown = await response.json();
+		if (!Array.isArray(data)) return [];
 
-		return data.map((msg: any) => {
-			const rawRole = (msg?.role ?? "").toString().toLowerCase();
-			const role =
-				rawRole === "bot" || rawRole === "assistant" ? "assistant" : "user";
-
-			// Prefer `content` if present; fall back to backend's `message` field
-			let contentValue: any = (msg as any)?.content ?? (msg as any)?.message;
-			if (Array.isArray(contentValue)) {
-				contentValue = contentValue
-					.map((part) =>
-						typeof part === "string"
-							? part
-							: (part?.text ?? part?.content ?? ""),
-					)
-					.join("\n");
-			} else if (typeof contentValue === "object" && contentValue !== null) {
-				contentValue =
-					contentValue.text ??
-					contentValue.content ??
-					contentValue.message ??
-					"";
-			}
-			const content =
-				typeof contentValue === "string"
-					? contentValue
-					: String(contentValue ?? "");
-
-			return {
-				role,
-				content,
-				timestamp: msg?.timestamp,
-			};
-		});
+		return (data as RawMessage[]).map((msg) => ({
+			// Django stores "user" | "bot"; the UI speaks "user" | "assistant".
+			role: (msg?.role ?? "").toLowerCase() === "bot" ? "assistant" : "user",
+			content: msg?.message ?? "",
+			timestamp: msg?.created_at,
+		}));
 	} catch (error) {
 		console.error("Error getting session messages:", error);
 		return [];
@@ -174,16 +158,13 @@ export async function getSessionMessages(
 }
 
 /**
- * Get conversations list from the backend
+ * List the current user's titled sessions, newest first.
  */
 export async function getConversations(): Promise<Convo[]> {
 	try {
 		const response = await fetch(API_ENDPOINTS.CONVERSATIONS, {
 			method: "GET",
-			credentials: "include",
-			headers: {
-				"Content-Type": "application/json",
-			},
+			...jsonRequest,
 		});
 
 		if (!response.ok) {
@@ -195,11 +176,12 @@ export async function getConversations(): Promise<Convo[]> {
 			return [];
 		}
 
-		const data: RawConversation[] = await response.json();
+		const data: unknown = await response.json();
+		if (!Array.isArray(data)) return [];
 
-		return data.map((conv: RawConversation) => ({
+		return (data as RawSession[]).map((conv) => ({
 			id: conv.id,
-			title: conv.title || "New Chat", // Fallback title if none exists
+			title: conv.title || "New Chat",
 			created_at: new Date(conv.created_at),
 		}));
 	} catch (error) {
@@ -209,59 +191,62 @@ export async function getConversations(): Promise<Convo[]> {
 }
 
 /**
- * Endpoint management utilities
+ * Rename a session.
  */
-
-/**
- * Get the stored API endpoint from localStorage
- */
-export function getStoredEndpoint(): string {
-	if (typeof window === "undefined" || typeof localStorage === "undefined")
-		return API_ENDPOINTS.CHAT_DEFAULT;
-	return (
-		localStorage.getItem(ENDPOINT_STORAGE_KEY) || API_ENDPOINTS.CHAT_DEFAULT
-	);
+export async function renameConversation(
+	id: string,
+	title: string,
+): Promise<boolean> {
+	try {
+		const response = await fetch(API_ENDPOINTS.RENAME_SESSION(id), {
+			method: "PATCH",
+			...jsonRequest,
+			body: JSON.stringify({ title }),
+		});
+		return response.ok;
+	} catch (error) {
+		console.error("Error renaming conversation:", error);
+		return false;
+	}
 }
 
 /**
- * Store the API endpoint in localStorage
+ * Delete a session and its messages.
  */
+export async function deleteConversation(id: string): Promise<boolean> {
+	try {
+		const response = await fetch(API_ENDPOINTS.DELETE_SESSION(id), {
+			method: "DELETE",
+			...jsonRequest,
+		});
+
+		if (!response.ok) {
+			console.error("Failed to delete conversation:", response.status);
+		}
+		return response.ok;
+	} catch (error) {
+		console.error("Error deleting conversation:", error);
+		return false;
+	}
+}
+
+/**
+ * Endpoint management utilities (dev-only model switcher).
+ */
+export function getStoredEndpoint(): string {
+	if (typeof window === "undefined" || typeof localStorage === "undefined")
+		return API_ENDPOINTS.CHAT;
+	return localStorage.getItem(ENDPOINT_STORAGE_KEY) || API_ENDPOINTS.CHAT;
+}
+
 export function setStoredEndpoint(endpoint: string): void {
 	if (typeof window === "undefined" || typeof localStorage === "undefined")
 		return;
 	localStorage.setItem(ENDPOINT_STORAGE_KEY, endpoint);
 }
 
-/**
- * Clear the stored API endpoint from localStorage
- */
 export function clearStoredEndpoint(): void {
 	if (typeof window === "undefined" || typeof localStorage === "undefined")
 		return;
 	localStorage.removeItem(ENDPOINT_STORAGE_KEY);
-}
-
-/**
- * Delete a conversation session
- */
-export async function deleteConversation(id: string): Promise<boolean> {
-	try {
-		const response = await fetch(`/api/c/${id}/`, {
-			method: "DELETE",
-			credentials: "include",
-			headers: {
-				"Content-Type": "application/json",
-			},
-		});
-
-		if (response.ok) {
-			return true;
-		} else {
-			console.error("Failed to delete conversation:", response.status);
-			return false;
-		}
-	} catch (error) {
-		console.error("Error deleting conversation:", error);
-		return false;
-	}
 }
