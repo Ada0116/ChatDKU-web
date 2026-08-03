@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { backendFetch, backendUnreachable, relayResponse, useMockApi } from '@/lib/server/backend';
+import { backendFetch, backendUnreachable, relayResponse, isMockApi } from '@/lib/server/backend';
 
 // POST /api/feedback -> Django chat.views.FeedbackView
 // Body: { userInput, botAnswer, feedbackReason, chatHistoryId } -> 201 { message }
@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: 'Invalid chat history ID' }, { status: 400 });
   }
 
-  if (useMockApi()) {
+  if (isMockApi()) {
     console.log('[mock] Feedback received:', body.feedbackReason);
     return Response.json({ message: 'Feedback saved successfully' }, { status: 201 });
   }

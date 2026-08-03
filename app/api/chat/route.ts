@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { backendFetch, backendUnreachable, relayResponse, useMockApi } from '@/lib/server/backend';
+import { backendFetch, backendUnreachable, relayResponse, isMockApi } from '@/lib/server/backend';
 
 // POST /api/chat -> Django chat.views.Chat
 // Body: { chatHistoryId, messages: [{role, content}], mode?: "default"|"agent", sources?: string[] }
@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: 'chatHistoryId is required' }, { status: 400 });
   }
 
-  if (useMockApi()) {
+  if (isMockApi()) {
     return Response.json(
       { chatId: `mock-chat-${Date.now()}`, sessionId: body.chatHistoryId },
       { status: 202 },

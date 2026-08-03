@@ -45,23 +45,23 @@ export function DocumentManager({ open, onOpenChange }: DocumentManagerProps) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (open) {
-      loadDocuments();
-    }
-  }, [open]);
-
-  const loadDocuments = async () => {
+  const loadDocuments = useCallback(async () => {
     setIsLoading(true);
     try {
       const docs = await userAPI.getUploadedDocuments();
       setDocuments(docs);
-    } catch (error) {
+    } catch {
       setError("Failed to load documents");
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (open) {
+      loadDocuments();
+    }
+  }, [open, loadDocuments]);
 
   const handleFileUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;

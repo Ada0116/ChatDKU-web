@@ -258,6 +258,8 @@ export function AIInput({
                 {activeReference}
               </span>
               <button
+                type="button"
+                aria-label="Clear reference"
                 className="text-black dark:text-white text-sm flex-shrink-0"
                 onClick={onClearReference}
               >
@@ -311,6 +313,8 @@ export function AIInput({
 
             <div>
               <button
+                type="button"
+                aria-label={isRecording ? "Stop voice input" : "Start voice input"}
                 className={cn(
                   inputButtonStyle,
                   inputValue && "hidden",
@@ -326,6 +330,7 @@ export function AIInput({
               <button
                 onClick={handleReset}
                 type="button"
+                aria-label="Send message"
                 className={cn(
                   inputButtonStyle,
                   inputValue ? "opacity-100 scale-100" : "hidden opacity-0 scale-50",

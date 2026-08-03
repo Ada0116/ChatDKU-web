@@ -30,7 +30,7 @@ export const BACKEND_BASE_URL = (
 ).replace(/\/$/, '');
 
 /** Mock data is on by default in `npm run dev`; set MOCK_API=false to hit the real backend. */
-export function useMockApi(): boolean {
+export function isMockApi(): boolean {
   return process.env.NODE_ENV === 'development' && process.env.MOCK_API !== 'false';
 }
 

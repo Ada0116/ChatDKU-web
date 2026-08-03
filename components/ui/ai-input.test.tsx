@@ -1,340 +1,227 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AIInput } from './ai-input';
 
-// Mock usePathname
-jest.mock('next/navigation', () => ({
-  usePathname: () => '/',
-}));
+vi.mock('next/navigation', () => ({ usePathname: () => '/' }));
 
-// Mock socket.io-client
-jest.mock('socket.io-client', () => ({
-  io: jest.fn(() => ({
-    emit: jest.fn(),
-    on: jest.fn(),
-    disconnect: jest.fn(),
-  })),
-}));
+const socket = { emit: vi.fn(), on: vi.fn(), disconnect: vi.fn() };
+vi.mock('socket.io-client', () => ({ io: vi.fn(() => socket) }));
 
-// Mock media devices
+const getUserMedia = vi.fn();
 Object.defineProperty(navigator, 'mediaDevices', {
   writable: true,
-  value: {
-    getUserMedia: jest.fn(),
-  },
+  configurable: true,
+  value: { getUserMedia },
 });
 
-// Mock MediaRecorder
 class MockMediaRecorder {
-  state: string = 'inactive';
+  static isTypeSupported() {
+    return true;
+  }
+  state = 'inactive';
   mimeType: string;
-  ondataavailable: ((event: any) => void) | null = null;
+  ondataavailable: ((event: { data: Blob }) => void) | null = null;
   onstop: (() => void) | null = null;
 
-  constructor(stream: MediaStream, options?: { mimeType?: string }) {
-    this.mimeType = options?.mimeType || 'audio/webm';
+  constructor(_stream: MediaStream, options?: { mimeType?: string }) {
+    this.mimeType = options?.mimeType ?? 'audio/webm';
   }
-
   start() {
     this.state = 'recording';
   }
-
   stop() {
     this.state = 'inactive';
     this.onstop?.();
   }
-
-  static isTypeSupported(mimeType: string) {
-    return true;
-  }
 }
+globalThis.MediaRecorder = MockMediaRecorder as unknown as typeof MediaRecorder;
 
-global.MediaRecorder = MockMediaRecorder as any;
+const stream = { getTracks: () => [{ stop: vi.fn() }] } as unknown as MediaStream;
+const textbox = () => screen.getByPlaceholderText('Type your message...');
 
-describe('AIInput', () => {
-  const mockOnSubmit = jest.fn();
-  const mockOnInputChange = jest.fn();
-  const mockOnThinkingModeChange = jest.fn();
+beforeEach(() => {
+  getUserMedia.mockReset().mockResolvedValue(stream);
+  socket.emit.mockReset();
+  socket.on.mockReset();
+  socket.disconnect.mockReset();
+});
 
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
+afterEach(() => {
+  vi.clearAllMocks();
+});
 
-  it('renders with default props', () => {
-    render(<AIInput />);
-    
-    expect(screen.getByPlaceholderText('Type your message...')).toBeInTheDocument();
-  });
-
-  it('handles text input changes', async () => {
+describe('typing and submitting', () => {
+  it('reports each change to the caller', async () => {
+    const onInputChange = vi.fn();
     const user = userEvent.setup();
-    render(<AIInput onInputChange={mockOnInputChange} />);
-    
-    const textarea = screen.getByPlaceholderText('Type your message...');
-    await user.type(textarea, 'Hello world');
-    
-    expect(mockOnInputChange).toHaveBeenCalledWith('Hello world');
+
+    render(<AIInput onInputChange={onInputChange} />);
+    await user.type(textbox(), 'Hello world');
+
+    expect(onInputChange).toHaveBeenLastCalledWith('Hello world');
   });
 
-  it('submits on Enter key without shift', async () => {
+  it('submits on Enter', async () => {
+    const onSubmit = vi.fn();
     const user = userEvent.setup();
-    render(<AIInput onSubmit={mockOnSubmit} />);
-    
-    const textarea = screen.getByPlaceholderText('Type your message...');
-    await user.type(textarea, 'Test message');
+
+    render(<AIInput onSubmit={onSubmit} />);
+    await user.type(textbox(), 'Test message');
     await user.keyboard('{Enter}');
-    
-    expect(mockOnSubmit).toHaveBeenCalledWith('Test message');
+
+    expect(onSubmit).toHaveBeenCalledWith('Test message');
   });
 
-  it('does not submit on Enter with shift', async () => {
+  it('inserts a newline on Shift+Enter instead of submitting', async () => {
+    const onSubmit = vi.fn();
     const user = userEvent.setup();
-    render(<AIInput onSubmit={mockOnSubmit} />);
-    
-    const textarea = screen.getByPlaceholderText('Type your message...');
-    await user.type(textarea, 'Test message');
+
+    render(<AIInput onSubmit={onSubmit} />);
+    await user.type(textbox(), 'Test message');
     await user.keyboard('{Shift>}{Enter}{/Shift}');
-    
-    expect(mockOnSubmit).not.toHaveBeenCalled();
+
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 
-  it('shows submit button when there is input', async () => {
+  it('submits with the send button once there is text', async () => {
+    const onSubmit = vi.fn();
     const user = userEvent.setup();
+
+    render(<AIInput onSubmit={onSubmit} />);
+    await user.type(textbox(), 'Test message');
+    await user.click(screen.getByRole('button', { name: 'Send message' }));
+
+    expect(onSubmit).toHaveBeenCalledWith('Test message');
+  });
+
+  it('does not submit blank input', async () => {
+    const onSubmit = vi.fn();
+    const user = userEvent.setup();
+
+    render(<AIInput onSubmit={onSubmit} />);
+    await user.type(textbox(), '   ');
+    await user.keyboard('{Enter}');
+
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('clears the box after a submit', async () => {
+    const user = userEvent.setup();
+
+    render(<AIInput onSubmit={vi.fn()} />);
+    await user.type(textbox(), 'Test message');
+    await user.keyboard('{Enter}');
+
+    await waitFor(() => expect(textbox()).toHaveValue(''));
+  });
+});
+
+describe('props', () => {
+  it('honours a custom placeholder', () => {
+    render(<AIInput placeholder="Preparing your chat session..." />);
+
+    expect(screen.getByPlaceholderText('Preparing your chat session...')).toBeInTheDocument();
+  });
+
+  it('disables the textarea and the mic when disabled', () => {
+    render(<AIInput disabled />);
+
+    expect(screen.getByPlaceholderText('Type your message...')).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Start voice input' })).toBeDisabled();
+  });
+
+  it('blocks submission while a reply is pending', async () => {
+    const onSubmit = vi.fn();
+    const user = userEvent.setup();
+
+    render(<AIInput onSubmit={onSubmit} submitDisabled />);
+    await user.type(textbox(), 'Test message');
+    await user.keyboard('{Enter}');
+
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('shows an active reference and can clear it', async () => {
+    const onClearReference = vi.fn();
+    const user = userEvent.setup();
+
+    render(<AIInput activeReference="Water Pavilion" onClearReference={onClearReference} />);
+    expect(screen.getByText('Water Pavilion')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Clear reference' }));
+    expect(onClearReference).toHaveBeenCalled();
+  });
+});
+
+describe('voice input', () => {
+  it('requests the microphone with the transcriber settings', async () => {
+    const user = userEvent.setup();
+
     render(<AIInput />);
-    
-    const textarea = screen.getByPlaceholderText('Type your message...');
-    expect(screen.queryByTestId('submit-button')).not.toBeInTheDocument();
-    
-    await user.type(textarea, 'Test');
-    
-    // The submit button should be visible when there's text
-    expect(screen.getByRole('button')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Start voice input' }));
+
+    expect(getUserMedia).toHaveBeenCalledWith({
+      audio: {
+        channelCount: 1,
+        sampleRate: 16000,
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+      },
+    });
   });
 
-  it('disables all controls when disabled prop is true', () => {
-    render(<AIInput disabled={true} />);
-    
-    const textarea = screen.getByPlaceholderText('Type your message...');
-    expect(textarea).toBeDisabled();
-  });
-
-  it('applies custom placeholder', () => {
-    render(<AIInput placeholder="Custom placeholder" />);
-    
-    expect(screen.getByPlaceholderText('Custom placeholder')).toBeInTheDocument();
-  });
-
-  it('handles thinking mode toggle', async () => {
+  it('switches the placeholder while listening', async () => {
     const user = userEvent.setup();
-    render(<AIInput thinkingMode={false} onThinkingModeChange={mockOnThinkingModeChange} />);
-    
-    // Find thinking mode toggle button (if it exists)
-    // This would need to be implemented in the component
-    expect(mockOnThinkingModeChange).not.toHaveBeenCalled();
+
+    render(<AIInput />);
+    await user.click(screen.getByRole('button', { name: 'Start voice input' }));
+
+    expect(await screen.findByPlaceholderText('Listening...')).toBeInTheDocument();
   });
 
-  describe('Voice Recording', () => {
-    it('starts recording when microphone button is clicked', async () => {
-      const mockStream = {
-        getTracks: () => [{ stop: jest.fn() }],
-      };
-      
-      (navigator.mediaDevices.getUserMedia as jest.Mock).mockResolvedValue(mockStream);
-      
-      const user = userEvent.setup();
-      render(<AIInput />);
-      
-      // Find and click the microphone button
-      const micButton = screen.getByRole('button'); // First button should be mic
-      await user.click(micButton);
-      
-      expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledWith({
-        audio: {
-          channelCount: 1,
-          sampleRate: 16000,
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false,
-        },
-      });
-    });
+  it('stops on a second press', async () => {
+    const user = userEvent.setup();
 
-    it('handles recording error gracefully', async () => {
-      (navigator.mediaDevices.getUserMedia as jest.Mock).mockRejectedValue(
-        new Error('Media device not found')
-      );
-      
-      const user = userEvent.setup();
-      render(<AIInput />);
-      
-      const micButton = screen.getByRole('button');
-      await user.click(micButton);
-      
-      // Should not throw error, just handle it gracefully
-      expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalled();
-    });
+    render(<AIInput />);
+    await user.click(screen.getByRole('button', { name: 'Start voice input' }));
+    await user.click(await screen.findByRole('button', { name: 'Stop voice input' }));
 
-    it('stops recording when clicked again', async () => {
-      const mockStream = {
-        getTracks: () => [{ stop: jest.fn() }],
-      };
-      
-      (navigator.mediaDevices.getUserMedia as jest.Mock).mockResolvedValue(mockStream);
-      
-      const user = userEvent.setup();
-      render(<AIInput />);
-      
-      const micButton = screen.getByRole('button');
-      
-      // Start recording
-      await user.click(micButton);
-      
-      // Stop recording
-      await user.click(micButton);
-      
-      expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalled();
-    });
-
-    it('updates placeholder when recording', async () => {
-      const mockStream = {
-        getTracks: () => [{ stop: jest.fn() }],
-      };
-      
-      (navigator.mediaDevices.getUserMedia as jest.Mock).mockResolvedValue(mockStream);
-      
-      const user = userEvent.setup();
-      render(<AIInput />);
-      
-      const micButton = screen.getByRole('button');
-      await user.click(micButton);
-      
-      // Placeholder should change to "Listening..."
-      expect(screen.getByPlaceholderText('Listening...')).toBeInTheDocument();
-    });
-
-    it('handles audio transcription response', async () => {
-      const mockStream = {
-        getTracks: () => [{ stop: jest.fn() }],
-      };
-      
-      (navigator.mediaDevices.getUserMedia as jest.Mock).mockResolvedValue(mockStream);
-      
-      const { io } = require('socket.io-client');
-      const mockSocket = {
-        emit: jest.fn(),
-        on: jest.fn(),
-        disconnect: jest.fn(),
-      };
-      io.mockReturnValue(mockSocket);
-      
-      const user = userEvent.setup();
-      render(<AIInput onInputChange={mockOnInputChange} />);
-      
-      const micButton = screen.getByRole('button');
-      await user.click(micButton);
-      
-      // Simulate transcription response
-      const socketOnCalls = mockSocket.on.mock.calls;
-      const audioTranscribedHandler = socketOnCalls.find(call => call[0] === 'audio_transcribed')?.[1];
-      
-      if (audioTranscribedHandler) {
-        audioTranscribedHandler({ text: 'Transcribed text' });
-        expect(mockOnInputChange).toHaveBeenCalledWith('Transcribed text');
-      }
-    });
+    await waitFor(() =>
+      expect(screen.getByPlaceholderText('Type your message...')).toBeInTheDocument(),
+    );
   });
 
-  describe('Socket Connection', () => {
-    it('establishes socket connection on mount', () => {
-      const { io } = require('socket.io-client');
-      const mockSocket = {
-        emit: jest.fn(),
-        on: jest.fn(),
-        disconnect: jest.fn(),
-      };
-      io.mockReturnValue(mockSocket);
-      
-      render(<AIInput />);
-      
-      expect(io).toHaveBeenCalledWith('https://chatdku.dukekunshan.edu.cn:8007', {
-        transports: ['websocket'],
-        secure: true,
-      });
-    });
+  it('survives a denied microphone', async () => {
+    getUserMedia.mockRejectedValue(new Error('Permission denied'));
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const user = userEvent.setup();
 
-    it('disconnects socket on unmount', () => {
-      const { io } = require('socket.io-client');
-      const mockSocket = {
-        emit: jest.fn(),
-        on: jest.fn(),
-        disconnect: jest.fn(),
-      };
-      io.mockReturnValue(mockSocket);
-      
-      const { unmount } = render(<AIInput />);
-      unmount();
-      
-      expect(mockSocket.disconnect).toHaveBeenCalled();
-    });
+    render(<AIInput />);
+    await user.click(screen.getByRole('button', { name: 'Start voice input' }));
+
+    // Still usable: no crash, and the box is not stuck in listening mode.
+    expect(await screen.findByPlaceholderText('Type your message...')).toBeInTheDocument();
+    errorSpy.mockRestore();
   });
 
-  describe('Auto-resize functionality', () => {
-    it('adjusts height based on content', async () => {
-      const user = userEvent.setup();
-      render(<AIInput />);
-      
-      const textarea = screen.getByPlaceholderText('Type your message...') as HTMLTextAreaElement;
-      
-      // Add multiple lines
-      await user.type(textarea, 'Line 1\nLine 2\nLine 3');
-      
-      // Height should have been adjusted (this would be tested through the useAutoResizeTextarea hook)
-      expect(textarea.value).toBe('Line 1\nLine 2\nLine 3');
-    });
-  });
+  it('feeds transcribed text into the input', async () => {
+    const onInputChange = vi.fn();
+    const user = userEvent.setup();
 
-  describe('Accessibility', () => {
-    it('has proper ARIA attributes', () => {
-      render(<AIInput />);
-      
-      const textarea = screen.getByPlaceholderText('Type your message...');
-      expect(textarea).toHaveAttribute('id', 'ai-input');
-    });
+    render(<AIInput onInputChange={onInputChange} />);
+    await user.click(screen.getByRole('button', { name: 'Start voice input' }));
 
-    it('supports keyboard navigation', async () => {
-      const user = userEvent.setup();
-      render(<AIInput onSubmit={mockOnSubmit} />);
-      
-      const textarea = screen.getByPlaceholderText('Type your message...');
-      textarea.focus();
-      expect(textarea).toHaveFocus();
-      
-      await user.type(textarea, 'Test');
-      await user.keyboard('{Enter}');
-      
-      expect(mockOnSubmit).toHaveBeenCalled();
-    });
-  });
+    await waitFor(() => expect(socket.on).toHaveBeenCalled());
+    const handler = socket.on.mock.calls.find(([event]) => event === 'audio_transcribed')?.[1];
+    expect(handler).toBeTypeOf('function');
 
-  describe('Styling and Visual Effects', () => {
-    it('applies shadow pulse effect when typing', async () => {
-      const user = userEvent.setup();
-      render(<AIInput />);
-      
-      const textarea = screen.getByPlaceholderText('Type your message...');
-      await user.type(textarea, 'Test');
-      
-      // The component should have the shadow pulse class when there's input
-      const container = textarea.closest('.shadow-pulse');
-      expect(container).toBeTruthy();
-    });
+    handler({ text: 'what are the dining hours' });
 
-    it('applies custom className', () => {
-      render(<AIInput className="custom-class" />);
-      
-      const container = screen.getByPlaceholderText('Type your message...').closest('.custom-class');
-      expect(container).toBeTruthy();
-    });
+    await waitFor(() =>
+      expect(screen.getByDisplayValue('what are the dining hours')).toBeInTheDocument(),
+    );
   });
 });

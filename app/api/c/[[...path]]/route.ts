@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { backendFetch, backendUnreachable, relayResponse, useMockApi } from '@/lib/server/backend';
+import { backendFetch, backendUnreachable, relayResponse, isMockApi } from '@/lib/server/backend';
 import {
   mockCreateSession,
   mockDeleteSession,
@@ -35,7 +35,7 @@ async function proxy(request: NextRequest, context: RouteContext, method: string
 export async function GET(request: NextRequest, context: RouteContext) {
   const { path = [] } = await context.params;
 
-  if (useMockApi()) {
+  if (isMockApi()) {
     if (path[0] === 'create_session') return Response.json(mockCreateSession(), { status: 201 });
     if (path.length === 0) return Response.json(mockSessions());
     if (path[1] === 'messages') return Response.json(mockSessionMessages(path[0]));
@@ -48,7 +48,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 export async function PATCH(request: NextRequest, context: RouteContext) {
   const body = await request.json().catch(() => ({}));
 
-  if (useMockApi()) {
+  if (isMockApi()) {
     const { path = [] } = await context.params;
     return Response.json(mockRenameSession(path[0], body?.title));
   }
@@ -57,7 +57,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 }
 
 export async function DELETE(request: NextRequest, context: RouteContext) {
-  if (useMockApi()) {
+  if (isMockApi()) {
     const { path = [] } = await context.params;
     mockDeleteSession(path[0]);
     return new Response(null, { status: 204 });

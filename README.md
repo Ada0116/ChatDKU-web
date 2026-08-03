@@ -21,8 +21,24 @@ Try to stick to these shadcn/ui components as much as possible, and only create 
 1. Run `npm install` in the frontend directory to install Node dependencies.
 2. Run `npm run dev` to spin up a localhost server and navigate to http://localhost:3000/ to see the homepage. The dev server will hot-reload whenever you save.
 3. Make necessary edits, and review changes on both a desktop screen and a mobile screen. Test with many aspect ratios to make sure nothing clips or looks broken. `npm run dev` serves mock chat responses with markdown in them, so check that responses stay clear and legible (this is important — users must be able to read ChatDKU's answers easily). Set `MOCK_API=false` in `.env.local` to hit the real backend instead, which needs internal network access.
-4. Use `npm run test` to run all tests for essential functionality. 
-5. Check that `npm run build` succeeds before pushing to the main branch.
+4. Use `npm run test` to run the suite (`npm run test:watch` while working, `npm run test:coverage` for a report).
+5. Check that `npm run typecheck`, `npm run lint` and `npm run build` all succeed before pushing to the main branch.
+
+### Testing:
+
+Tests run on [Vitest](https://vitest.dev) with Testing Library, split into two projects:
+
+- **ui** — components and browser-side `lib/` code, in jsdom.
+- **api** — the route handlers under `app/`, in node, against real `Request`/`Response` objects.
+
+Because the route handlers are proxies, the useful seam to stub is Django itself, not our own
+endpoints. `integration/chat-flow.test.tsx` does exactly that: the component's `fetch` calls are
+routed into the actual route handlers, and only the backend beyond them is faked, so a mismatch
+between the client, the proxy and the documented backend contract fails the suite.
+
+When you change an endpoint, update the contract notes in `lib/server/backend.ts` and the fake
+backend in the integration test together — they are the two places that describe what Django
+returns.
 
 ### Deploying to production:
 

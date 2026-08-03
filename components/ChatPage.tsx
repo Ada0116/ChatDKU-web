@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, SetStateAction } from "react";
-import { marked } from "marked";
+
 import { useRouter } from "next/navigation";
 import Cookies from "js-cookie";
 import {
@@ -22,55 +22,20 @@ import { Button } from "@/components/ui/button";
 import CampusMap from "@/components/CampusMap";
 import AcademicCalendar from "@/components/academic-calendar";
 import { API_ENDPOINTS } from "@/lib/constants";
+import {
+	configureMarked,
+	eventText,
+	parseFrame,
+	parseMarkdown,
+	splitFrames,
+	stripThinkBlocks,
+	type StreamEvent,
+} from "@/lib/chat-stream";
 
 type ChatPageProps = {
 	isDev?: boolean;
 };
 
-const configureMarked = () => {
-	marked.setOptions({
-		breaks: true,
-		gfm: true,
-	});
-};
-
-const parseMarkdown = (content: string): string => {
-	if (!content) return "";
-	const cleanedContent = content.replace(/<think>[\s\S]*?<\/think>/gi, "");
-	const parsed = marked.parse(cleanedContent) as any;
-	if (typeof parsed?.then === "function") {
-		return cleanedContent;
-	}
-	return typeof parsed === "string" && parsed.trim().length > 0
-		? parsed
-		: cleanedContent;
-};
-
-// Agent payloads as emitted by chatdku.core.intermediate_tracing.EventStream and
-// relayed by Django's ChatStream view.
-type StreamEvent = {
-  type: "reasoning" | "chunk" | "chunk_batch" | "error" | "end";
-  stage?: string;
-  content?: string;
-  chunks?: { content?: string }[];
-};
-
-const parseThinkingStream = (text: string): { thinking: string; response: string } => {
-	const lines = text.split("\n");
-	const thinkingLines: string[] = [];
-	let responseStart = -1;
-	for (let i = 0; i < lines.length; i++) {
-		if (lines[i].startsWith("[THINKING]:")) {
-			thinkingLines.push(lines[i].slice("[THINKING]:".length));
-		} else {
-			responseStart = i;
-			break;
-		}
-	}
-	const response =
-		responseStart >= 0 ? lines.slice(responseStart).join("\n").trimStart() : "";
-	return { thinking: thinkingLines.join("\n"), response };
-};
 
 const ensureThinkingBoxStyles = () => {
 	if (typeof document === "undefined") return;
@@ -242,8 +207,7 @@ const streamSSEFromReader = async (
 	};
 
 	const renderAnswer = () => {
-		const cleaned = fullAnswer.replace(/<think>[\s\S]*?<\/think>/gi, "");
-		contentDiv.innerHTML = parseMarkdown(cleaned);
+		contentDiv.innerHTML = parseMarkdown(stripThinkBlocks(fullAnswer));
 	};
 
 	const handleEvent = (event: StreamEvent) => {
@@ -254,18 +218,12 @@ const streamSSEFromReader = async (
 					event.content ? `[${event.stage}] ${event.content}` : `[${event.stage}]`,
 				);
 				break;
-			case "chunk":
-				dismissThinkingBox();
-				fullAnswer += event.content ?? "";
-				renderAnswer();
-				break;
 			// Django unpacks chunk_batch into individual chunks, but the agent's
-			// EventStream emits the batch — handle it in case we ever read direct.
+			// EventStream emits the batch — eventText handles both.
+			case "chunk":
 			case "chunk_batch":
 				dismissThinkingBox();
-				for (const chunk of event.chunks ?? []) {
-					fullAnswer += chunk.content ?? "";
-				}
+				fullAnswer += eventText(event);
 				renderAnswer();
 				break;
 			case "error":
@@ -282,24 +240,9 @@ const streamSSEFromReader = async (
 		}
 	};
 
-	// One SSE frame: optional `id:` line, one `data:` line, blank-line terminated.
-	// Lone ":" frames are Django's heartbeats.
 	const handleFrame = (frame: string) => {
-		if (!frame.trim()) return;
-		const dataLine = frame.split("\n").find((line) => line.startsWith("data: "));
-		if (!dataLine) return;
-
-		let parsed: unknown;
-		try {
-			parsed = JSON.parse(dataLine.slice(6));
-		} catch {
-			return;
-		}
-
-		// The mock stream wraps payloads as { id, data }; Django sends them bare.
-		const event = ((parsed as { data?: StreamEvent })?.data ??
-			parsed) as StreamEvent;
-		if (event?.type) handleEvent(event);
+		const event = parseFrame(frame);
+		if (event) handleEvent(event);
 	};
 
 	try {
@@ -309,8 +252,8 @@ const streamSSEFromReader = async (
 
 			buffer += decoder.decode(value, { stream: true });
 
-			const frames = buffer.split("\n\n");
-			buffer = frames.pop() || "";
+			const { frames, rest } = splitFrames(buffer);
+			buffer = rest;
 			frames.forEach(handleFrame);
 
 			chatLog.scrollTo(0, chatLog.scrollHeight);
@@ -327,133 +270,6 @@ const streamSSEFromReader = async (
 		dismissThinkingBox();
 		return fullAnswer || "Error: Failed to read response";
 	}
-};
-
-const streamFromReader = async (
-	response: Response,
-	elementContainer: HTMLElement,
-	options?: {
-		onThinkingContent?: (content: string) => void;
-		onResponseStart?: () => void;
-	},
-): Promise<{ success: boolean; text: string }> => {
-	if (!response.body) {
-		return { success: false, text: "" };
-	}
-
-	let accumulated = "";
-	let responseStartNotified = false;
-	try {
-		const reader = response.body.getReader();
-		const decoder = new TextDecoder();
-		let firstChunk = true;
-
-		elementContainer.innerHTML = "";
-
-		const contentDiv = document.createElement("div");
-		contentDiv.className =
-			"text-foreground break-words overflow-wrap-anywhere markdown-content text-[0.9375rem]";
-		elementContainer.appendChild(contentDiv);
-
-		const renderChunk = () => {
-			if (options) {
-				const { thinking, response: responseText } = parseThinkingStream(accumulated);
-				if (thinking) options.onThinkingContent?.(thinking);
-				if (responseText && !responseStartNotified) {
-					responseStartNotified = true;
-					options.onResponseStart?.();
-				}
-				const textToRender = responseText || (!thinking ? accumulated : "");
-				if (textToRender) {
-					const cleaned = textToRender.replace(/<think>[\s\S]*?<\/think>/gi, "");
-					contentDiv.innerHTML = parseMarkdown(cleaned);
-				}
-			} else {
-				const cleaned = accumulated.replace(/<think>[\s\S]*?<\/think>/gi, "");
-				contentDiv.innerHTML = parseMarkdown(cleaned);
-			}
-		};
-
-		while (true) {
-			const { done, value } = await reader.read();
-			if (done) break;
-
-			if (firstChunk) {
-				console.log("begin response stream");
-				firstChunk = false;
-			}
-
-			accumulated += decoder.decode(value, { stream: true });
-			renderChunk();
-
-			const chatLog = document.getElementById("chat-log");
-			chatLog?.scrollTo(0, chatLog.scrollHeight);
-		}
-
-		accumulated += decoder.decode();
-		renderChunk();
-
-		return { success: true, text: accumulated };
-	} catch (error) {
-		console.warn("Stream reading failed, reverting to simulated stream", error);
-		return { success: false, text: accumulated };
-	}
-};
-
-const streamText = async (
-	text: string,
-	elementContainer: HTMLElement,
-	chunkDelayMs = 60,
-) => {
-	const cleanedText = text.replace(/<think>[\s\S]*?<\/think>/gi, "");
-
-	if (!document.getElementById("stream-style")) {
-		const style = document.createElement("style");
-		style.id = "stream-style";
-		style.innerHTML = `
-      .stream-chunk { opacity: 0; transform: translateY(2px); transition: opacity 120ms ease-out, transform 120ms ease-out; }
-      .stream-chunk.visible { opacity: 1; transform: translateY(0); }
-    `;
-		document.head.appendChild(style);
-	}
-
-	const streamContainer = document.createElement("div");
-	streamContainer.className =
-		"text-foreground  break-words overflow-wrap-anywhere markdown-content text-[0.9375rem]";
-	elementContainer.appendChild(streamContainer);
-
-	const paragraphs = cleanedText
-		.split(/\n{2,}/)
-		.map((s) => s.trim())
-		.filter((s) => s.length > 0);
-
-	let chunks: string[] = [];
-	if (paragraphs.length > 1) {
-		chunks = paragraphs;
-	} else {
-		const sentences = cleanedText.match(/[^\r\n.!?]+[.!?]*(?:\s+|$)/g) || [
-			cleanedText,
-		];
-		chunks = sentences.map((s) => s.trim()).filter((s) => s.length > 0);
-	}
-
-	for (const chunk of chunks) {
-		const chunkHTML = parseMarkdown(chunk);
-		const chunkDiv = document.createElement("div");
-		chunkDiv.className = "stream-chunk";
-		chunkDiv.innerHTML = chunkHTML;
-		streamContainer.appendChild(chunkDiv);
-
-		// eslint-disable-next-line @typescript-eslint/no-unused-expressions
-		chunkDiv.offsetHeight;
-		requestAnimationFrame(() => {
-			chunkDiv.classList.add("visible");
-		});
-
-		await new Promise((resolve) => setTimeout(resolve, chunkDelayMs));
-	}
-
-	return streamContainer;
 };
 
 export default function ChatPage({ isDev = false }: ChatPageProps) {
@@ -545,7 +361,7 @@ export default function ChatPage({ isDev = false }: ChatPageProps) {
 		: sessionPlaceholder;
 
 	const handleFeedback = useCallback(
-		async (userInput: any, answer: any, reason: any) => {
+		async (userInput: string, answer: string, reason: string) => {
 			try {
 				await fetch(API_ENDPOINTS.FEEDBACK, {
 					method: "POST",
@@ -568,7 +384,7 @@ export default function ChatPage({ isDev = false }: ChatPageProps) {
 	);
 
 	const addMessageToChat = useCallback(
-		(role: string, content: any, className: any, shouldStream = false) => {
+		(role: string, content: string, className: string, shouldStream = false) => {
 			const chatLog = document.getElementById("chat-log");
 			const messageElement = document.createElement("div");
 			const isUser = role === "user";
@@ -988,7 +804,7 @@ export default function ChatPage({ isDev = false }: ChatPageProps) {
 
 											submitBtn?.addEventListener("click", () => {
 												if (!selectedReason) return;
-												let reasonToSend = selectedReason === "other" ? customReason.value.trim() : selectedReason;
+												const reasonToSend = selectedReason === "other" ? customReason.value.trim() : selectedReason;
 												if (selectedReason === "other" && !reasonToSend) {
 													customReason.classList.add("border-destructive");
 													customReason.placeholder = "Please write something!";

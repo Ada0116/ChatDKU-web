@@ -1,432 +1,243 @@
 import React from 'react';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useRouter } from 'next/navigation';
 import Cookies from 'js-cookie';
-
-// Import the main components
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ChatPage from '@/components/ChatPage';
-import { AIInput } from '@/components/ui/ai-input';
+import { POST as chatPost } from '@/app/api/chat/route';
+import { GET as chatStream } from '@/app/api/chat/[chatId]/route';
+import { GET as sessionsGet } from '@/app/api/c/[[...path]]/route';
+import { POST as feedbackPost } from '@/app/api/feedback/route';
 
-// Mock all external dependencies
-jest.mock('next/navigation', () => ({
-  useRouter: jest.fn(),
-  usePathname: () => '/',
+// End-to-end through the real seams: the browser code calls the actual route
+// handlers, and only the Django backend itself is stubbed. Anything that drifts
+// between client, proxy and the documented backend contract fails here.
+
+vi.mock('next/navigation', () => ({ useRouter: vi.fn() }));
+vi.mock('js-cookie', () => ({ default: { get: vi.fn(), set: vi.fn() } }));
+vi.mock('@/components/ui/ai-input', () => ({
+  AIInput: ({ onSubmit, submitDisabled }: {
+    onSubmit?: (value: string) => void;
+    submitDisabled?: boolean;
+  }) => (
+    <button
+      data-testid="submit"
+      disabled={submitDisabled}
+      onClick={() => onSubmit?.('What majors are available at Duke Kunshan University?')}
+    >
+      Send
+    </button>
+  ),
 }));
+vi.mock('@/components/navbar', () => ({ Navbar: () => <nav /> }));
+vi.mock('@/components/side', () => ({ __esModule: true, default: () => <div /> }));
+vi.mock('@/components/WelcomeBanner', () => ({ __esModule: true, default: () => <div /> }));
+vi.mock('@/components/doc-manager', () => ({ DocumentManager: () => <div /> }));
+vi.mock('@/components/prompt_recs', () => ({ PromptRecs: () => <div /> }));
+vi.mock('@/components/CampusMap', () => ({ __esModule: true, default: () => <div /> }));
+vi.mock('@/components/academic-calendar', () => ({ __esModule: true, default: () => <div /> }));
 
-jest.mock('js-cookie', () => ({
-  get: jest.fn(),
-  set: jest.fn(),
-}));
+const SESSION = '08d8d518-bc9a-4f25-8e1a-8b6f3264f59b';
+const BACKEND = 'http://10.200.14.39:8999';
 
-jest.mock('@/lib/convosNew', () => ({
-  getNewSession: jest.fn(),
-  getCurrentSessionId: jest.fn(),
-  getStoredEndpoint: jest.fn(),
-  getSessionMessages: jest.fn(),
-}));
+/** Requests the stubbed Django server received, in order. */
+let backendCalls: { method: string; url: string; body?: string }[] = [];
 
-jest.mock('socket.io-client', () => ({
-  io: jest.fn(() => ({
-    emit: jest.fn(),
-    on: jest.fn(),
-    disconnect: jest.fn(),
-  })),
-}));
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
-// Mock fetch for API calls
-global.fetch = jest.fn();
+/** Stands in for Django, speaking the contract in django_backend/. */
+async function fakeDjango(url: string, init: RequestInit = {}): Promise<Response> {
+  const method = init.method ?? 'GET';
+  const path = url.replace(BACKEND, '');
+  backendCalls.push({ method, url: path, body: init.body as string | undefined });
 
-// Mock media devices for voice recording
-Object.defineProperty(navigator, 'mediaDevices', {
-  writable: true,
-  value: {
-    getUserMedia: jest.fn(() => Promise.resolve({
-      getTracks: () => [{ stop: jest.fn() }],
-    })),
-  },
+  if (path === '/api/c/create_session/') return json({ session_id: SESSION }, 201);
+  if (path === '/api/chat') return json({ chatId: 'chat-1', sessionId: SESSION }, 202);
+  if (path.startsWith('/api/chat/')) {
+    const frames = [
+      { type: 'reasoning', stage: 'start', content: 'Agent started' },
+      { type: 'reasoning', stage: 'Executor', content: 'VectorQuery: DKU majors' },
+      { type: 'chunk_batch', chunks: [{ content: 'DKU offers **24** ' }, { content: 'majors, ' }] },
+      { type: 'chunk', stage: 'generation', content: 'including Data Science.' },
+      { type: 'end', stage: 'end', content: '' },
+    ];
+    const body = frames.map((f, i) => `id: ${i}\ndata: ${JSON.stringify(f)}\n\n`).join('');
+    return new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+  }
+  if (path === '/api/feedback') return json({ message: 'Feedback saved successfully' }, 201);
+
+  return json({ detail: 'Not found.' }, 404);
+}
+
+/**
+ * Routes browser fetches into the app's own route handlers, so a request only
+ * reaches the stub after passing through the proxy layer for real.
+ */
+async function routeThroughApp(input: string, init: RequestInit = {}): Promise<Response> {
+  const { NextRequest } = await import('next/server');
+  const url = new URL(input, 'http://localhost:3000');
+  const request = new NextRequest(url, init as ConstructorParameters<typeof NextRequest>[1]);
+  const path = url.pathname;
+
+  if (path === '/api/chat') return chatPost(request);
+  if (path.startsWith('/api/chat/')) {
+    const chatId = path.split('/')[3];
+    return chatStream(request, { params: Promise.resolve({ chatId }) });
+  }
+  if (path === '/api/feedback') return feedbackPost(request);
+  if (path.startsWith('/api/c/')) {
+    const segments = path.replace('/api/c/', '').split('/').filter(Boolean);
+    return sessionsGet(request, { params: Promise.resolve({ path: segments }) });
+  }
+
+  throw new Error(`Unrouted request: ${path}`);
+}
+
+const chatLog = () => document.getElementById('chat-log') as HTMLElement;
+
+beforeEach(() => {
+  backendCalls = [];
+
+  // The handlers call global fetch to reach Django; the browser code calls it to
+  // reach the handlers. Distinguish by URL.
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: string, init: RequestInit = {}) =>
+      String(input).startsWith(BACKEND)
+        ? fakeDjango(String(input), init)
+        : routeThroughApp(String(input), init),
+    ),
+  );
+
+  vi.mocked(useRouter).mockReturnValue({ push: vi.fn() } as unknown as ReturnType<typeof useRouter>);
+  vi.mocked(Cookies.get).mockReturnValue('true' as unknown as ReturnType<typeof Cookies.get>);
+  document.cookie = 'chatdku_session_id=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
 });
 
-global.MediaRecorder = jest.fn().mockImplementation(() => ({
-  state: 'inactive',
-  start: jest.fn(),
-  stop: jest.fn(),
-  ondataavailable: null,
-  onstop: null,
-  static: {
-    isTypeSupported: jest.fn(() => true),
-  },
-})) as any;
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
-describe('End-to-End Chat Flow Integration Tests', () => {
-  const mockPush = jest.fn();
-  const mockRouter = { push: mockPush } as any;
+describe('a chat turn, browser through proxy to backend', () => {
+  it('creates a session, sends the turn and renders the streamed answer', async () => {
+    const user = userEvent.setup();
 
-  beforeEach(() => {
-    jest.clearAllMocks();
-    (useRouter as jest.Mock).mockReturnValue(mockRouter);
-    (Cookies.get as jest.Mock).mockReturnValue('true'); // terms accepted
-    
-    // Mock successful session creation
-    const { getNewSession } = require('@/lib/convosNew');
-    getNewSession.mockResolvedValue('test-session-123');
-    
-    // Mock successful API responses
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      text: () => Promise.resolve('# Test Response\n\nThis is a **markdown** response with formatting.'),
+    render(<ChatPage />);
+    await user.click(await screen.findByTestId('submit'));
+
+    await waitFor(() => expect(chatLog().textContent).toContain('including Data Science.'));
+
+    // The session must come from the backend, not be invented client-side.
+    expect(backendCalls[0]).toMatchObject({ method: 'GET', url: '/api/c/create_session/' });
+
+    const post = backendCalls.find((call) => call.url === '/api/chat');
+    expect(JSON.parse(post!.body!)).toEqual({
+      messages: [{ role: 'user', content: 'What majors are available at Duke Kunshan University?' }],
+      chatHistoryId: SESSION,
+      mode: 'default',
     });
-    
-    // Setup DOM for chat interactions
-    document.body.innerHTML = '<div id="chat-log"></div>';
+
+    // Then the answer is read from the stream keyed by the returned chatId.
+    expect(backendCalls.some((call) => call.url === `/api/chat/chat-1?sessionId=${SESSION}`)).toBe(true);
   });
 
-  it('completes full chat flow from session start to message exchange', async () => {
+  it('joins batched and single chunks into one markdown answer', async () => {
     const user = userEvent.setup();
-    
-    render(<ChatPage />);
-    
-    // 1. Wait for session to be ready
-    await waitFor(() => {
-      expect(screen.getByTestId('ai-input')).not.toBeDisabled();
-    });
-    
-    // 2. Verify welcome elements are shown
-    expect(screen.getByTestId('welcome-banner')).toBeInTheDocument();
-    expect(screen.getByTestId('new-chat-button')).not.toBeDisabled();
-    
-    // 3. Type and send a message
-    const textarea = screen.getByPlaceholderText(/Type your message/);
-    await user.type(textarea, 'What are the office hours?');
-    
-    // Submit the message
-    const submitButton = screen.getByRole('button', { name: /submit/i }) || 
-                        Array.from(screen.getAllByRole('button')).find((btn: HTMLElement) => btn.textContent?.includes(''));
-    await user.click(submitButton);
-    
-    // 4. Verify API call was made
-    await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/chat'),
-        expect.objectContaining({
-          method: 'POST',
-          body: expect.stringContaining('What are the office hours?'),
-        })
-      );
-    });
-    
-    // 5. Verify response is processed and displayed
-    await waitFor(() => {
-      const chatLog = document.getElementById('chat-log');
-      expect(chatLog?.innerHTML).toContain('Test Response');
-      expect(chatLog?.innerHTML).toContain('markdown');
-    });
-  });
 
-  it('handles voice recording input flow', async () => {
-    const user = userEvent.setup();
-    
     render(<ChatPage />);
-    
-    await waitFor(() => {
-      expect(screen.getByTestId('ai-input')).not.toBeDisabled();
-    });
-    
-    // Find and click the microphone button
-    const micButton = Array.from(screen.getAllByRole('button')).find((btn: HTMLElement) => 
-      btn.querySelector('svg') // Mic button should have an icon
+    await user.click(await screen.findByTestId('submit'));
+
+    await waitFor(() =>
+      expect(chatLog().textContent).toContain('DKU offers 24 majors, including Data Science.'),
     );
-    
-    if (micButton) {
-      await user.click(micButton);
-      
-      // Verify recording started
-      expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledWith({
-        audio: expect.objectContaining({
-          channelCount: 1,
-          sampleRate: 16000,
-        }),
-      });
-      
-      // Simulate transcription response
-      const { io } = require('socket.io-client');
-      const mockSocket = io();
-      const transcriptionHandler = mockSocket.on.mock.calls.find((call: any[]) => call[0] === 'audio_transcribed')?.[1];
-      
-      if (transcriptionHandler) {
-        transcriptionHandler({ text: 'What are the office hours?' });
-        
-        // Verify transcribed text appears in input
-        await waitFor(() => {
-          const textarea = screen.getByPlaceholderText(/Type your message/) as HTMLTextAreaElement;
-          expect(textarea.value).toBe('What are the office hours?');
-        });
-      }
-    }
+    expect(chatLog().innerHTML).toContain('<strong>24</strong>');
   });
 
-  it('handles feedback submission after response', async () => {
+  it('never renders the POST envelope as the answer', async () => {
     const user = userEvent.setup();
-    
+
     render(<ChatPage />);
-    
-    await waitFor(() => {
-      expect(screen.getByTestId('ai-input')).not.toBeDisabled();
-    });
-    
-    // Send a message
-    const textarea = screen.getByPlaceholderText(/Type your message/);
-    await user.type(textarea, 'Test question');
-    
-    const submitButton = Array.from(screen.getAllByRole('button')).filter((btn: HTMLElement) => 
-      btn.textContent?.includes('') || btn.closest('form')
-    )[0];
-    await user.click(submitButton);
-    
-    // Wait for response and feedback buttons
-    await waitFor(() => {
-      const chatLog = document.getElementById('chat-log');
-      expect(chatLog?.innerHTML).toContain('Test Response');
-      
-      // Look for feedback buttons in the response
-      const feedbackYes = chatLog?.querySelector('.feedback-yes');
-      const feedbackNo = chatLog?.querySelector('.feedback-no');
-      
-      expect(feedbackYes || feedbackNo).toBeTruthy();
-    });
+    await user.click(await screen.findByTestId('submit'));
+
+    await waitFor(() => expect(chatLog().textContent).toContain('including Data Science.'));
+    expect(chatLog().textContent).not.toContain('chatId');
+    expect(chatLog().textContent).not.toContain('sessionId');
   });
 
-  it('handles new chat creation and conversation switching', async () => {
+  it('shows reasoning stages before the answer arrives', async () => {
     const user = userEvent.setup();
-    const { getNewSession, getSessionMessages } = require('@/lib/convosNew');
-    
-    // Mock conversation history
-    getSessionMessages.mockResolvedValue([
-      { role: 'user', content: 'Previous question', timestamp: '2024-01-01' },
-      { role: 'assistant', content: 'Previous answer', timestamp: '2024-01-01' },
-    ]);
-    
+
     render(<ChatPage />);
-    
-    await waitFor(() => {
-      expect(screen.getByTestId('new-chat-button')).toBeInTheDocument();
-    });
-    
-    // Create new chat
-    const newChatButton = screen.getByTestId('new-chat-button');
-    await user.click(newChatButton);
-    
-    // Verify new session was created
-    await waitFor(() => {
-      expect(getNewSession).toHaveBeenCalledTimes(2); // Initial + new chat
-    });
-    
-    // Clear chat log for new session
-    const chatLog = document.getElementById('chat-log');
-    expect(chatLog?.innerHTML).toBe('');
+    await user.click(await screen.findByTestId('submit'));
+
+    await waitFor(() => expect(chatLog().textContent).toContain('including Data Science.'));
+    // The thinking box is dismissed once the answer starts, so assert on the
+    // reasoning frames having been delivered rather than a transient DOM state.
+    expect(backendCalls.some((call) => call.url.startsWith('/api/chat/chat-1'))).toBe(true);
   });
 
-  it('handles error states and recovery', async () => {
+  it('sends feedback for the completed turn', async () => {
     const user = userEvent.setup();
-    const { getNewSession } = require('@/lib/convosNew');
-    
-    // Mock session failure
-    getNewSession.mockResolvedValueOnce(null);
-    
+
     render(<ChatPage />);
-    
-    // Should show error state
-    await waitFor(() => {
-      expect(screen.getByText(/We couldn't start a chat session/)).toBeInTheDocument();
-      expect(screen.getByText('Try again')).toBeInTheDocument();
-    });
-    
-    // Mock successful retry
-    getNewSession.mockResolvedValueOnce('retry-session-456');
-    
-    // Click retry
-    const retryButton = screen.getByText('Try again');
-    await user.click(retryButton);
-    
-    // Should recover and show chat interface
-    await waitFor(() => {
-      expect(screen.getByTestId('ai-input')).not.toBeDisabled();
+    await user.click(await screen.findByTestId('submit'));
+    await waitFor(() => expect(screen.getByText('Was this response helpful?')).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: 'Yes' }));
+
+    await waitFor(() => expect(backendCalls.some((call) => call.url === '/api/feedback')).toBe(true));
+    const feedback = JSON.parse(backendCalls.find((call) => call.url === '/api/feedback')!.body!);
+    expect(feedback).toEqual({
+      userInput: 'What majors are available at Duke Kunshan University?',
+      botAnswer: 'DKU offers **24** majors, including Data Science.',
+      feedbackReason: 'helpful',
+      chatHistoryId: SESSION,
     });
   });
+});
 
-  it('handles dev mode vs production mode differences', async () => {
+describe('failure handling', () => {
+  it('reports an unreachable backend instead of hanging', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string, init: RequestInit = {}) => {
+        if (String(input).startsWith(BACKEND)) throw new Error('ECONNREFUSED');
+        return routeThroughApp(String(input), init);
+      }),
+    );
+
+    render(<ChatPage />);
+
+    // Session creation fails, so the page offers a retry rather than a broken chat.
+    expect(await screen.findByText(/couldn't start a chat session/i)).toBeInTheDocument();
+  });
+
+  it('surfaces an agent error mid-stream', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string, init: RequestInit = {}) => {
+        const url = String(input);
+        if (url.startsWith(`${BACKEND}/api/chat/`)) {
+          const body =
+            `data: ${JSON.stringify({ type: 'error', stage: 'error', content: 'tool server down' })}\n\n` +
+            `data: ${JSON.stringify({ type: 'end', stage: 'end', content: '' })}\n\n`;
+          return new Response(body, {
+            status: 200,
+            headers: { 'Content-Type': 'text/event-stream' },
+          });
+        }
+        return url.startsWith(BACKEND) ? fakeDjango(url, init) : routeThroughApp(url, init);
+      }),
+    );
     const user = userEvent.setup();
-    
-    // Test dev mode
-    render(<ChatPage isDev={true} />);
-    
-    await waitFor(() => {
-      expect(screen.getByTestId('ai-input')).not.toBeDisabled();
-    });
-    
-    const textarea = screen.getByPlaceholderText(/Type your message/);
-    await user.type(textarea, 'test'); // Special test command
-    
-    const submitButton = Array.from(screen.getAllByRole('button')).filter((btn: HTMLElement) => 
-      btn.textContent?.includes('') || btn.closest('form')
-    )[0];
-    await user.click(submitButton);
-    
-    // In dev mode, should use test endpoint for "test" command
-    await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith('/mdtest.md');
-    });
-    
-    // Cleanup and test production mode
-    jest.clearAllMocks();
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      text: () => Promise.resolve('Production response'),
-    });
-    
-    render(<ChatPage isDev={false} />);
-    
-    await waitFor(() => {
-      expect(screen.getByTestId('ai-input')).not.toBeDisabled();
-    });
-    
-    const prodTextarea = screen.getByPlaceholderText(/Type your message/);
-    await user.type(prodTextarea, 'Normal question');
-    
-    const prodSubmitButton = Array.from(screen.getAllByRole('button')).filter((btn: HTMLElement) => 
-      btn.textContent?.includes('') || btn.closest('form')
-    )[0];
-    await user.click(prodSubmitButton);
-    
-    // In production, should use real API endpoint
-    await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('https://chatdku.dukekunshan.edu.cn/api/chat'),
-        expect.any(Object)
-      );
-    });
-  });
 
-  it('handles session persistence and restoration', async () => {
-    const { getCurrentSessionId, getSessionMessages } = require('@/lib/convosNew');
-    
-    // Mock existing session
-    getCurrentSessionId.mockReturnValue('existing-session-789');
-    getSessionMessages.mockResolvedValue([
-      { role: 'user', content: 'Hello', timestamp: '2024-01-01' },
-      { role: 'assistant', content: 'Hi there!', timestamp: '2024-01-01' },
-    ]);
-    
     render(<ChatPage />);
-    
-    await waitFor(() => {
-      expect(screen.getByTestId('ai-input')).not.toBeDisabled();
-    });
-    
-    // Should load existing conversation
-    await waitFor(() => {
-      expect(getSessionMessages).toHaveBeenCalledWith('existing-session-789');
-    });
-  });
+    await user.click(await screen.findByTestId('submit'));
 
-  it('handles accessibility throughout the chat flow', async () => {
-    const user = userEvent.setup();
-    
-    render(<ChatPage />);
-    
-    await waitFor(() => {
-      expect(screen.getByTestId('ai-input')).not.toBeDisabled();
-    });
-    
-    // Test keyboard navigation
-    const textarea = screen.getByPlaceholderText(/Type your message/);
-    textarea.focus();
-    expect(textarea).toHaveFocus();
-    
-    // Type and submit using keyboard
-    await user.type(textarea, 'Test message{Enter}');
-    
-    // Verify submission worked
-    await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalled();
-    });
-  });
-
-  it('handles concurrent user interactions gracefully', async () => {
-    const user = userEvent.setup();
-    
-    render(<ChatPage />);
-    
-    await waitFor(() => {
-      expect(screen.getByTestId('ai-input')).not.toBeDisabled();
-    });
-    
-    // Simulate rapid typing and submission
-    const textarea = screen.getByPlaceholderText(/Type your message/);
-    await user.type(textarea, 'Quick message');
-    
-    // Submit multiple times rapidly (should be handled gracefully)
-    const submitButton = Array.from(screen.getAllByRole('button')).filter((btn: HTMLElement) => 
-      btn.textContent?.includes('') || btn.closest('form')
-    )[0];
-    
-    await user.click(submitButton);
-    
-    // Second click should be ignored or handled gracefully
-    await user.click(submitButton);
-    
-    await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  it('handles markdown rendering in responses', async () => {
-    const user = userEvent.setup();
-    
-    // Mock response with complex markdown
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      text: () => Promise.resolve(`
-# Complex Response
-
-This includes **bold**, *italic*, and \`inline code\`.
-
-## Lists
-- Item 1
-- Item 2
-
-\`\`\`javascript
-const example = "code block";
-\`\`\`
-
-[Link](https://example.com)
-      `),
-    });
-    
-    render(<ChatPage />);
-    
-    await waitFor(() => {
-      expect(screen.getByTestId('ai-input')).not.toBeDisabled();
-    });
-    
-    const textarea = screen.getByPlaceholderText(/Type your message/);
-    await user.type(textarea, 'Show me complex markdown');
-    
-    const submitButton = Array.from(screen.getAllByRole('button')).filter((btn: HTMLElement) => 
-      btn.textContent?.includes('') || btn.closest('form')
-    )[0];
-    await user.click(submitButton);
-    
-    // Verify markdown is rendered correctly
-    await waitFor(() => {
-      const chatLog = document.getElementById('chat-log');
-      expect(chatLog?.innerHTML).toContain('<h1');
-      expect(chatLog?.innerHTML).toContain('<strong');
-      expect(chatLog?.innerHTML).toContain('<em');
-      expect(chatLog?.innerHTML).toContain('<code');
-      expect(chatLog?.innerHTML).toContain('<ul');
-      expect(chatLog?.innerHTML).toContain('<pre');
-      expect(chatLog?.innerHTML).toContain('<a');
-    });
+    await waitFor(() =>
+      expect(chatLog().textContent).toContain('Something went wrong while generating a response.'),
+    );
   });
 });

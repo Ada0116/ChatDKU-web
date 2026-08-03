@@ -1,11 +1,11 @@
 import { NextRequest } from 'next/server';
-import { backendFetch, backendUnreachable, relayResponse, useMockApi } from '@/lib/server/backend';
+import { backendFetch, backendUnreachable, relayResponse, isMockApi } from '@/lib/server/backend';
 
 // Django core.views.UploadView
 //   GET  /user/upload -> { netid, document: string[] }
 //   POST /user/upload -> multipart, field name `file_`, PDF only, 10MB cap -> 201 { message }
 export async function GET(request: NextRequest) {
-  if (useMockApi()) {
+  if (isMockApi()) {
     return Response.json({ netid: 'dev-user', document: ['dku-handbook.pdf'] });
   }
 
@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  if (useMockApi()) {
+  if (isMockApi()) {
     return Response.json({ message: 'File uploaded successfully' }, { status: 201 });
   }
 

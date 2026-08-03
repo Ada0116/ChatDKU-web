@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { backendFetch, backendUnreachable, relayResponse, useMockApi } from '@/lib/server/backend';
+import { backendFetch, backendUnreachable, relayResponse, isMockApi } from '@/lib/server/backend';
 import { mockChatStream } from '@/lib/mocks/chat-stream';
 
 // GET /api/chat/{chatId}?sessionId=… -> Django chat.views.ChatStream
@@ -13,7 +13,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ cha
     return Response.json({ error: 'sessionId is required' }, { status: 400 });
   }
 
-  if (useMockApi()) {
+  if (isMockApi()) {
     return new Response(mockChatStream(), {
       headers: {
         'Content-Type': 'text/event-stream',

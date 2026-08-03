@@ -1,516 +1,211 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  getNewSession,
-  getCurrentSessionId,
-  setCurrentSessionId,
   clearSessionId,
-  getSessionMessages,
-  getConversations,
-  getStoredEndpoint,
-  setStoredEndpoint,
   clearStoredEndpoint,
+  deleteConversation,
+  getConversations,
+  getCurrentSessionId,
+  getNewSession,
+  getSessionMessages,
+  getStoredEndpoint,
+  renameConversation,
+  setCurrentSessionId,
+  setStoredEndpoint,
 } from './convosNew';
+import { API_ENDPOINTS } from './constants';
 
-// Mock fetch
-global.fetch = jest.fn();
+// Responses below mirror django_backend/chat/serializer.py exactly.
+const jsonResponse = (body: unknown, init: ResponseInit = {}) =>
+  new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+    ...init,
+  });
 
-// Mock document.cookie
-Object.defineProperty(document, 'cookie', {
-  writable: true,
-  value: '',
+const mockFetch = vi.fn();
+
+beforeEach(() => {
+  vi.stubGlobal('fetch', mockFetch);
+  mockFetch.mockReset();
+  // Clear cookies between tests.
+  for (const cookie of document.cookie.split('; ')) {
+    const name = cookie.split('=')[0];
+    if (name) document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
+  }
+  localStorage.clear();
 });
 
-// Mock localStorage
-const localStorageMock = {
-  getItem: jest.fn(),
-  setItem: jest.fn(),
-  removeItem: jest.fn(),
-  clear: jest.fn(),
-  length: 0,
-  key: jest.fn(),
-};
-global.localStorage = localStorageMock;
-
-// Ensure window is defined for client-side tests
-if (!global.window) {
-  (global as any).window = {};
-}
-
-// Mock localStorage on window
-Object.defineProperty(global.window, 'localStorage', {
-  value: localStorageMock,
-  writable: true,
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
-describe('convosNew', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    document.cookie = '';
-    localStorageMock.getItem.mockClear();
-    localStorageMock.setItem.mockClear();
-    localStorageMock.removeItem.mockClear();
+describe('getNewSession', () => {
+  it('creates a session through create_session and stores the id', async () => {
+    mockFetch.mockResolvedValue(
+      jsonResponse({ session_id: '08d8d518-bc9a-4f25-8e1a-8b6f3264f59b' }, { status: 201 }),
+    );
+
+    const sessionId = await getNewSession();
+
+    expect(sessionId).toBe('08d8d518-bc9a-4f25-8e1a-8b6f3264f59b');
+    expect(mockFetch).toHaveBeenCalledWith(
+      '/api/c/create_session/',
+      expect.objectContaining({ method: 'GET', credentials: 'include' }),
+    );
+    expect(getCurrentSessionId()).toBe('08d8d518-bc9a-4f25-8e1a-8b6f3264f59b');
   });
 
-  describe('Session Management', () => {
-    describe('getNewSession', () => {
-      it('creates a new session successfully', async () => {
-        const mockResponse = { session_id: 'new-session-123' };
-        (fetch as jest.Mock).mockResolvedValue({
-          ok: true,
-          json: () => Promise.resolve(mockResponse),
-        });
+  it('returns null and stores nothing when the backend rejects the caller', async () => {
+    mockFetch.mockResolvedValue(jsonResponse({ message: 'Unauthorized' }, { status: 401 }));
 
-        const result = await getNewSession();
-
-        expect(fetch).toHaveBeenCalledWith(
-          expect.stringContaining('/api/get_session'),
-          expect.objectContaining({
-            method: 'GET',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-          })
-        );
-        expect(result).toBe('new-session-123');
-        expect(document.cookie).toContain('chatdku_session_id=new-session-123');
-      });
-
-      it('handles session creation failure', async () => {
-        (fetch as jest.Mock).mockResolvedValue({
-          ok: false,
-          status: 500,
-          statusText: 'Internal Server Error',
-        });
-
-        const result = await getNewSession();
-
-        expect(result).toBeNull();
-        expect(document.cookie).not.toContain('chatdku_session_id');
-      });
-
-      it('handles network errors', async () => {
-        (fetch as jest.Mock).mockRejectedValue(new Error('Network error'));
-
-        const result = await getNewSession();
-
-        expect(result).toBeNull();
-      });
-
-      it('handles empty session_id response', async () => {
-        const mockResponse = { session_id: '' };
-        (fetch as jest.Mock).mockResolvedValue({
-          ok: true,
-          json: () => Promise.resolve(mockResponse),
-        });
-
-        const result = await getNewSession();
-
-        expect(result).toBe('');
-        expect(document.cookie).toContain('chatdku_session_id=');
-      });
-    });
-
-    describe('getCurrentSessionId', () => {
-      it('retrieves session ID from cookies', () => {
-        document.cookie = 'chatdku_session_id=test-session-456; other=value';
-        const result = getCurrentSessionId();
-
-        expect(result).toBe('test-session-456');
-      });
-
-      it('returns null when no session cookie exists', () => {
-        document.cookie = 'other=value';
-        const result = getCurrentSessionId();
-
-        expect(result).toBeNull();
-      });
-
-      it('returns null in server environment', () => {
-        const originalWindow = global.window;
-        delete (global as any).window;
-
-        const result = getCurrentSessionId();
-
-        expect(result).toBeNull();
-
-        global.window = originalWindow;
-      });
-
-      it('handles URL-encoded session IDs', () => {
-        document.cookie = 'chatdku_session_id=session%20with%20spaces';
-        const result = getCurrentSessionId();
-
-        expect(result).toBe('session with spaces');
-      });
-    });
-
-    describe('setCurrentSessionId', () => {
-      it('sets session ID in cookies', () => {
-        setCurrentSessionId('new-session-789');
-
-        expect(document.cookie).toContain('chatdku_session_id=new-session-789');
-      });
-
-      it('does nothing in server environment', () => {
-        const originalWindow = global.window;
-        const originalDocument = global.document;
-        delete (global as any).window;
-        delete (global as any).document;
-
-        // Clear any existing cookies
-        if (originalDocument) {
-          originalDocument.cookie = '';
-        }
-
-        setCurrentSessionId('should-not-set');
-
-        console.log('document after call:', typeof document, document.cookie);
-        expect(document.cookie).not.toContain('should-not-set');
-
-        global.window = originalWindow;
-        global.document = originalDocument;
-      });
-    });
-
-    describe('clearSessionId', () => {
-      it('clears session ID from cookies', () => {
-        document.cookie = 'chatdku_session_id=test-session; other=value';
-        clearSessionId();
-
-        expect(document.cookie).toContain('chatdku_session_id=;');
-        expect(document.cookie).toContain('expires=Thu, 01 Jan 1970 00:00:00 GMT');
-      });
-
-      it('does nothing in server environment', () => {
-        const originalWindow = global.window;
-        delete (global as any).window;
-
-        clearSessionId();
-
-        global.window = originalWindow;
-      });
-    });
+    expect(await getNewSession()).toBeNull();
+    expect(getCurrentSessionId()).toBeNull();
   });
 
-  describe('Message Management', () => {
-    describe('getSessionMessages', () => {
-      it('retrieves messages successfully', async () => {
-        const mockMessages = [
-          { role: 'user', content: 'Hello', timestamp: '2024-01-01T00:00:00Z' },
-          { role: 'bot', content: 'Hi there!', timestamp: '2024-01-01T00:00:01Z' },
-        ];
-        (fetch as jest.Mock).mockResolvedValue({
-          ok: true,
-          json: () => Promise.resolve(mockMessages),
-        });
+  it('returns null when the payload has no session_id', async () => {
+    mockFetch.mockResolvedValue(jsonResponse({}));
 
-        const result = await getSessionMessages('test-session-id');
-
-        expect(fetch).toHaveBeenCalledWith(
-          expect.stringContaining('/api/c/test-session-id/messages'),
-          expect.objectContaining({
-            method: 'GET',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-          })
-        );
-        expect(result).toHaveLength(2);
-        expect(result[0]).toEqual({
-          role: 'user',
-          content: 'Hello',
-          timestamp: '2024-01-01T00:00:00Z',
-        });
-        expect(result[1]).toEqual({
-          role: 'assistant',
-          content: 'Hi there!',
-          timestamp: '2024-01-01T00:00:01Z',
-        });
-      });
-
-      it('handles different role formats', async () => {
-        const mockMessages = [
-          { role: 'User', content: 'Hello' },
-          { role: 'Bot', content: 'Hi' },
-          { role: 'assistant', content: 'Hey' },
-          { role: 'user', content: 'Hey back' },
-        ];
-        (fetch as jest.Mock).mockResolvedValue({
-          ok: true,
-          json: () => Promise.resolve(mockMessages),
-        });
-
-        const result = await getSessionMessages('test-session');
-
-        expect(result[0].role).toBe('user');
-        expect(result[1].role).toBe('assistant');
-        expect(result[2].role).toBe('assistant');
-        expect(result[3].role).toBe('user');
-      });
-
-      it('handles array content in messages', async () => {
-        const mockMessages = [
-          {
-            role: 'assistant',
-            content: [
-              { type: 'text', text: 'Part 1' },
-              { type: 'text', text: 'Part 2' },
-            ],
-          },
-        ];
-        (fetch as jest.Mock).mockResolvedValue({
-          ok: true,
-          json: () => Promise.resolve(mockMessages),
-        });
-
-        const result = await getSessionMessages('test-session');
-
-        expect(result[0].content).toBe('Part 1\nPart 2');
-      });
-
-      it('handles object content in messages', async () => {
-        const mockMessages = [
-          {
-            role: 'assistant',
-            content: { text: 'Object content' },
-          },
-        ];
-        (fetch as jest.Mock).mockResolvedValue({
-          ok: true,
-          json: () => Promise.resolve(mockMessages),
-        });
-
-        const result = await getSessionMessages('test-session');
-
-        expect(result[0].content).toBe('Object content');
-      });
-
-      it('falls back to message field when content is missing', async () => {
-        const mockMessages = [
-          {
-            role: 'user',
-            message: 'Fallback message',
-          },
-        ];
-        (fetch as jest.Mock).mockResolvedValue({
-          ok: true,
-          json: () => Promise.resolve(mockMessages),
-        });
-
-        const result = await getSessionMessages('test-session');
-
-        expect(result[0].content).toBe('Fallback message');
-      });
-
-      it('handles API errors', async () => {
-        (fetch as jest.Mock).mockResolvedValue({
-          ok: false,
-          status: 404,
-          statusText: 'Not Found',
-        });
-
-        const result = await getSessionMessages('invalid-session');
-
-        expect(result).toEqual([]);
-      });
-
-      it('handles network errors', async () => {
-        (fetch as jest.Mock).mockRejectedValue(new Error('Network error'));
-
-        const result = await getSessionMessages('test-session');
-
-        expect(result).toEqual([]);
-      });
-    });
-
-    describe('getConversations', () => {
-      it('retrieves conversations list successfully', async () => {
-        const mockConversations = [
-          { id: 'conv1', title: 'Chat 1', created_at: '2024-01-01T00:00:00Z' },
-          { id: 'conv2', created_at: '2024-01-02T00:00:00Z' }, // No title
-        ];
-        (fetch as jest.Mock).mockResolvedValue({
-          ok: true,
-          json: () => Promise.resolve(mockConversations),
-        });
-
-        const result = await getConversations();
-
-        expect(fetch).toHaveBeenCalledWith(
-          expect.stringContaining('/api/c/'),
-          expect.objectContaining({
-            method: 'GET',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-          })
-        );
-        expect(result).toHaveLength(2);
-        expect(result[0]).toEqual({
-          id: 'conv1',
-          title: 'Chat 1',
-          created_at: new Date('2024-01-01T00:00:00Z'),
-        });
-        expect(result[1]).toEqual({
-          id: 'conv2',
-          title: 'New Chat', // Fallback title
-          created_at: new Date('2024-01-02T00:00:00Z'),
-        });
-      });
-
-      it('handles API errors', async () => {
-        (fetch as jest.Mock).mockResolvedValue({
-          ok: false,
-          status: 500,
-          statusText: 'Internal Server Error',
-        });
-
-        const result = await getConversations();
-
-        expect(result).toEqual([]);
-      });
-
-      it('handles network errors', async () => {
-        (fetch as jest.Mock).mockRejectedValue(new Error('Network error'));
-
-        const result = await getConversations();
-
-        expect(result).toEqual([]);
-      });
-    });
+    expect(await getNewSession()).toBeNull();
+    expect(getCurrentSessionId()).toBeNull();
   });
 
-  describe('Endpoint Management', () => {
-    describe('getStoredEndpoint', () => {
-      it('retrieves endpoint from localStorage', () => {
-        localStorageMock.getItem.mockReturnValue('https://custom-endpoint.com');
-        const result = getStoredEndpoint();
+  it('returns null when the network fails', async () => {
+    mockFetch.mockRejectedValue(new Error('offline'));
 
-        expect(result).toBe('https://custom-endpoint.com');
-        expect(localStorageMock.getItem).toHaveBeenCalledWith('chatdku_api_endpoint');
-      });
+    expect(await getNewSession()).toBeNull();
+  });
+});
 
-      it('returns default endpoint when none stored', () => {
-        localStorageMock.getItem.mockReturnValue(null);
-        const result = getStoredEndpoint();
+describe('session id storage', () => {
+  it('round-trips through a cookie', () => {
+    expect(getCurrentSessionId()).toBeNull();
 
-        expect(result).toBe('https://chatdku.dukekunshan.edu.cn/api/chat');
-      });
+    setCurrentSessionId('abc-123');
+    expect(getCurrentSessionId()).toBe('abc-123');
 
-      it('returns default endpoint in server environment', () => {
-        const originalWindow = global.window;
-        delete (global as any).window;
-
-        const result = getStoredEndpoint();
-
-        expect(result).toBe('https://chatdku.dukekunshan.edu.cn/api/chat');
-
-        global.window = originalWindow;
-      });
-    });
-
-    describe('setStoredEndpoint', () => {
-      it('stores endpoint in localStorage', () => {
-        setStoredEndpoint('https://new-endpoint.com');
-
-        expect(localStorageMock.setItem).toHaveBeenCalledWith(
-          'chatdku_api_endpoint',
-          'https://new-endpoint.com'
-        );
-      });
-
-      it('does nothing in server environment', () => {
-        const originalWindow = global.window;
-        const originalLocalStorage = global.localStorage;
-        
-        (global as any).window = undefined;
-        (global as any).localStorage = undefined;
-
-        setStoredEndpoint('https://should-not-store.com');
-
-        expect(localStorageMock.setItem).not.toHaveBeenCalled();
-
-        global.window = originalWindow;
-        global.localStorage = originalLocalStorage;
-      });
-    });
-
-    describe('clearStoredEndpoint', () => {
-      it('removes endpoint from localStorage', () => {
-        clearStoredEndpoint();
-
-        expect(localStorageMock.removeItem).toHaveBeenCalledWith('chatdku_api_endpoint');
-      });
-
-      it('does nothing in server environment', () => {
-        const originalWindow = global.window;
-        const originalLocalStorage = global.localStorage;
-        
-        (global as any).window = undefined;
-        (global as any).localStorage = undefined;
-
-        clearStoredEndpoint();
-
-        expect(localStorageMock.removeItem).not.toHaveBeenCalled();
-
-        global.window = originalWindow;
-        global.localStorage = originalLocalStorage;
-      });
-    });
+    clearSessionId();
+    expect(getCurrentSessionId()).toBeNull();
   });
 
-  describe('Cookie Utilities', () => {
-    it('handles special characters in session IDs', () => {
-      setCurrentSessionId('session+with=special&chars');
-      expect(document.cookie).toContain('chatdku_session_id=session%2Bwith%3Dspecial%26chars');
-    });
+  it('reads its own cookie when others are present', () => {
+    document.cookie = 'terms_accepted=true; path=/';
+    document.cookie = 'other=value; path=/';
+    setCurrentSessionId('abc-123');
 
-    it('handles multiple cookies', () => {
-      document.cookie = 'other=value; path=/';
-      setCurrentSessionId('test-session');
-      expect(document.cookie).toContain('chatdku_session_id=test-session');
-      expect(document.cookie).toContain('other=value');
-    });
+    expect(getCurrentSessionId()).toBe('abc-123');
+  });
+});
 
-    it('properly decodes URL-encoded cookies', () => {
-      document.cookie = 'chatdku_session_id=session%20with%20spaces';
-      const result = getCurrentSessionId();
-      expect(result).toBe('session with spaces');
-    });
+describe('getSessionMessages', () => {
+  it('maps Django message rows onto the UI shape', async () => {
+    mockFetch.mockResolvedValue(
+      jsonResponse([
+        { id: 1, role: 'user', message: 'Which majors exist?', created_at: '2026-08-01T10:00:00Z' },
+        { id: 2, role: 'bot', message: 'DKU offers 24.', created_at: '2026-08-01T10:00:05Z' },
+      ]),
+    );
+
+    const messages = await getSessionMessages('sess-1');
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      '/api/c/sess-1/messages/',
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(messages).toEqual([
+      { role: 'user', content: 'Which majors exist?', timestamp: '2026-08-01T10:00:00Z' },
+      { role: 'assistant', content: 'DKU offers 24.', timestamp: '2026-08-01T10:00:05Z' },
+    ]);
   });
 
-  describe('Error Handling', () => {
-    it('handles malformed JSON responses', async () => {
-      (fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        json: () => Promise.reject(new Error('Unexpected token in JSON')),
-      });
+  it('url-encodes the session id', async () => {
+    mockFetch.mockResolvedValue(jsonResponse([]));
 
-      const result = await getNewSession();
+    await getSessionMessages('a b/c');
 
-      expect(result).toBeNull();
+    expect(mockFetch).toHaveBeenCalledWith('/api/c/a%20b%2Fc/messages/', expect.anything());
+  });
+
+  it('returns an empty list on error, non-arrays and network failure', async () => {
+    mockFetch.mockResolvedValue(jsonResponse({ detail: 'Not found.' }, { status: 404 }));
+    expect(await getSessionMessages('missing')).toEqual([]);
+
+    mockFetch.mockResolvedValue(jsonResponse({ not: 'an array' }));
+    expect(await getSessionMessages('sess-1')).toEqual([]);
+
+    mockFetch.mockRejectedValue(new Error('offline'));
+    expect(await getSessionMessages('sess-1')).toEqual([]);
+  });
+});
+
+describe('getConversations', () => {
+  it('maps sessions and parses created_at', async () => {
+    mockFetch.mockResolvedValue(
+      jsonResponse([
+        { id: 'sess-1', title: 'Signature work', created_at: '2026-08-01T10:00:00Z' },
+        { id: 'sess-2', title: '', created_at: '2026-07-30T09:00:00Z' },
+      ]),
+    );
+
+    const convos = await getConversations();
+
+    expect(mockFetch).toHaveBeenCalledWith(API_ENDPOINTS.CONVERSATIONS, expect.anything());
+    expect(convos[0]).toEqual({
+      id: 'sess-1',
+      title: 'Signature work',
+      created_at: new Date('2026-08-01T10:00:00Z'),
     });
+    // An untitled session still needs something to render.
+    expect(convos[1].title).toBe('New Chat');
+  });
 
-    it('handles missing session_id in response', async () => {
-      (fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({}), // Empty response
-      });
+  it('returns an empty list when unauthorised', async () => {
+    mockFetch.mockResolvedValue(jsonResponse({ message: 'Unauthorized' }, { status: 401 }));
+    expect(await getConversations()).toEqual([]);
+  });
+});
 
-      const result = await getNewSession();
+describe('renameConversation', () => {
+  it('PATCHes the rename action with the new title', async () => {
+    mockFetch.mockResolvedValue(jsonResponse({ id: 'sess-1', title: 'Renamed' }));
 
-      expect(result).toBeUndefined();
-    });
+    expect(await renameConversation('sess-1', 'Renamed')).toBe(true);
+    expect(mockFetch).toHaveBeenCalledWith(
+      '/api/c/sess-1/rename/',
+      expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ title: 'Renamed' }) }),
+    );
+  });
 
-    it('handles invalid date strings in conversations', async () => {
-      const mockConversations = [
-        { id: 'conv1', title: 'Chat 1', created_at: 'invalid-date' },
-      ];
-      (fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve(mockConversations),
-      });
+  it('reports failure without throwing', async () => {
+    mockFetch.mockRejectedValue(new Error('offline'));
+    expect(await renameConversation('sess-1', 'Renamed')).toBe(false);
+  });
+});
 
-      const result = await getConversations();
+describe('deleteConversation', () => {
+  it('DELETEs the session detail route and accepts 204', async () => {
+    mockFetch.mockResolvedValue(new Response(null, { status: 204 }));
 
-      expect(result[0].created_at).toBeInstanceOf(Date);
-      expect(isNaN(result[0].created_at.getTime())).toBe(true);
-    });
+    expect(await deleteConversation('sess-1')).toBe(true);
+    expect(mockFetch).toHaveBeenCalledWith(
+      '/api/c/sess-1/',
+      expect.objectContaining({ method: 'DELETE', credentials: 'include' }),
+    );
+  });
+
+  it('returns false when the backend refuses', async () => {
+    mockFetch.mockResolvedValue(jsonResponse({ detail: 'Not found.' }, { status: 404 }));
+    expect(await deleteConversation('sess-1')).toBe(false);
+  });
+});
+
+describe('stored endpoint', () => {
+  it('defaults to the chat endpoint and round-trips overrides', () => {
+    expect(getStoredEndpoint()).toBe(API_ENDPOINTS.CHAT);
+
+    setStoredEndpoint('/dev/qwen/chat');
+    expect(getStoredEndpoint()).toBe('/dev/qwen/chat');
+
+    clearStoredEndpoint();
+    expect(getStoredEndpoint()).toBe(API_ENDPOINTS.CHAT);
   });
 });

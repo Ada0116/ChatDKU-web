@@ -1,11 +1,11 @@
 import { NextRequest } from 'next/server';
-import { backendFetch, backendUnreachable, relayResponse, useMockApi } from '@/lib/server/backend';
+import { backendFetch, backendUnreachable, relayResponse, isMockApi } from '@/lib/server/backend';
 
 // GET /user/ -> Django core.views.HealthView -> { netid, username, role }
 // The values come off the Shibboleth-populated Django session, so this doubles
 // as the "am I logged in?" probe used by the welcome banner.
 export async function GET(request: NextRequest) {
-  if (useMockApi()) {
+  if (isMockApi()) {
     return Response.json({ netid: 'dev-user', username: 'Development User', role: 'student' });
   }
 
