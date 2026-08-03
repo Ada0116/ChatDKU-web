@@ -24,7 +24,7 @@ afterEach(() => {
 });
 
 describe('getUserProfile', () => {
-  it('reads the identity from /user/', async () => {
+  it('reads the identity from the user endpoint', async () => {
     mockFetch.mockResolvedValue(
       jsonResponse({ netid: 'ab123', username: 'Ada Lovelace', role: 'student' }),
     );
@@ -35,9 +35,20 @@ describe('getUserProfile', () => {
       role: 'student',
     });
     expect(mockFetch).toHaveBeenCalledWith(
-      '/user/',
+      '/user',
       expect.objectContaining({ method: 'GET', credentials: 'include' }),
     );
+  });
+
+  it('asks for /user without a trailing slash', async () => {
+    // Apache maps `/user` onto `http://127.0.0.1:8009/user/`, appending whatever
+    // follows. A trailing slash here would reach Django as `/user//`, which its
+    // resolver does not match. See lib/constants.ts.
+    mockFetch.mockResolvedValue(jsonResponse({ netid: 'ab123', username: 'Ada', role: '' }));
+
+    await userAPI.getUserProfile();
+
+    expect(mockFetch.mock.calls[0][0]).toBe('/user');
   });
 
   it('falls back to a placeholder when unauthenticated', async () => {
