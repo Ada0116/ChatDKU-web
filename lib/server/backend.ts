@@ -19,6 +19,16 @@
 // sessions) used by ChatDKU-web-public. Do not point this app at it. The agent
 // itself is a third FastAPI service on :8123, reached by Django via Celery.
 //
+// Careful with `/user`: the vhost has `ProxyPass /user http://127.0.0.1:8009/user/`,
+// whose two sides disagree about the trailing slash, so Apache appends the
+// remainder of the request path to a target that already ends in one. `/user`
+// itself is fine (empty remainder -> `/user/`), but `/user/upload` arrives as
+// `/user//upload` and Django's resolver does not collapse repeated slashes, so
+// it 404s. Balancing the rule (`ProxyPass /user/ http://127.0.0.1:8009/user/`)
+// is the fix; until then uploads only work in development. The paths below are
+// what this server sends to Django directly, with no Apache in between, so
+// they are spelled the way Django expects.
+//
 // Backend reference (ChatDKU-backend, django_backend/):
 //   GET    /user/                       -> { netid, username, role }
 //   GET    /user/upload                 -> { netid, document: string[] }

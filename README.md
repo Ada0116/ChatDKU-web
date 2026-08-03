@@ -16,7 +16,9 @@ There are three backend services on GPU4, and Apache (`/etc/apache2/sites-enable
 | `/public/chat`, `/public/auth/get-token` | **FastAPI public**, `127.0.0.1:8999` |
 | everything else | **this Next server**, `127.0.0.1:3000` |
 
-Two things follow from that table:
+One trap in that table: the `/user` rule is `ProxyPass /user http://127.0.0.1:8009/user/`, and the two sides disagree about the trailing slash. Apache appends whatever follows `/user` to a target that already ends in one, and Django's resolver never collapses repeated slashes. So `/user` works (empty remainder), while `/user/upload` reaches Django as `/user//upload` and 404s — **file uploads cannot work in production until that vhost rule is balanced** to `ProxyPass /user/ http://127.0.0.1:8009/user/`. Don't "fix" it by adding a trailing slash on the client; that just turns `/user` into `/user//`.
+
+Two more things follow from that table:
 
 - The student app you are working on talks to **Django**, not to the FastAPI service. The FastAPI backend on `:8999` is a separate product — the unauthenticated public chat used by `ChatDKU-web-public`, with its own JWT auth and a single-step plain-text stream. A third FastAPI service on `:8123` runs the agent itself and is only ever called by Django, through Celery.
 - Apache reaches Django directly, so **the route handlers under `app/api/` and `app/user/` only run in development**. They are still written as faithful proxies that mirror Django's URLs 1:1 (see `lib/server/backend.ts` for the full contract), so dev and production behave the same and a change to the Apache config cannot silently start serving mock data. Mock responses only appear when `MOCK_API` is on, which is the default for `npm run dev`.
