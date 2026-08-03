@@ -6,9 +6,25 @@
 // PATCH/DELETE into a GET.
 
 export const API_ENDPOINTS = {
-  /** core.views.HealthView -> { netid, username, role } */
-  USER: '/user/',
-  /** core.views.UploadView -> GET { netid, document[] }, POST multipart field `file_` */
+  /**
+   * core.views.HealthView -> { netid, username, role }
+   *
+   * No trailing slash, deliberately. Apache proxies `/user` to
+   * `http://127.0.0.1:8009/user/`, and because the two sides of that rule
+   * disagree about the trailing slash, anything after `/user` is appended to a
+   * path that already ends in one. `/user` sends an empty remainder and lands
+   * on `/user/` correctly; `/user/` would arrive as `/user//`, which Django's
+   * resolver does not match (it never collapses repeated slashes) — a 404.
+   */
+  USER: '/user',
+  /**
+   * core.views.UploadView -> GET { netid, document[] }, POST multipart field `file_`
+   *
+   * Same rule, and here it bites: this arrives at Django as `/user//upload`
+   * and 404s. Uploads cannot work through Apache until the vhost rule is
+   * balanced (`ProxyPass /user/ http://127.0.0.1:8009/user/`), so treat this
+   * endpoint as dev-only for now.
+   */
   FILE_UPLOAD: '/user/upload',
   /** chat.views.Chat -> 202 { chatId, sessionId } */
   CHAT: '/api/chat',
