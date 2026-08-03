@@ -1,6 +1,0 @@
-[Unit]
-Description=Remove ChatDKU deployment backups older than 1 month
-
-[Service]
-Type=oneshot
-ExecStart=/usr/bin/find /var/www/chatdku_webapp_backups -mindepth 1 -maxdepth 1 -type d -mtime +30 -exec rm -rf {} +
