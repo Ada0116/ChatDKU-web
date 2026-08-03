@@ -2,7 +2,9 @@
 
 ## Our Stack:
 
-We're using the Next.js framework for its quick development opportunities and rich open-source community. Since our backend is handled by Django, we are serving the website as a static site using `next build`.
+We're using the Next.js framework for its quick development opportunities and rich open-source community. The site runs as a **real Node server** (`next build` + `next start`) on port 3000 on GPU4, behind nginx. Our chat, session, and user data comes from the Django backend.
+
+Because we run a Node server rather than a static export, the route handlers under `app/api/` and `app/user/` are live in production, not just dev mocks. `app/api/chat/` and `app/api/chat/[chatId]/` proxy to the Django backend; `app/api/get_session/` mints a session UUID here in the app. The handlers under `app/api/c/` (conversation list/messages) and `app/user/` still return **mock data** — check them against nginx's routing before relying on either in production.
 
 We're using the [shadcn/ui](https://ui.shadcn.com/) open-source UI library. This is a widely used, simple, and customizable UI library that uses Tailwind CSS for globally consistent styling.
 
@@ -18,36 +20,28 @@ Try to stick to these shadcn/ui components as much as possible, and only create 
 
 1. Run `npm install` in the frontend directory to install Node dependencies.
 2. Run `npm run dev` to spin up a localhost server and navigate to http://localhost:3000/ to see the homepage. The dev server will hot-reload whenever you save.
-3. Make necessary edits, and review changes on both a desktop screen and a mobile screen. Test with many aspect ratios to make sure nothing clips or looks broken. You can also enter "test" in the chat box to test proper markdown rendering (this is important as users must be able to read ChatDKU's responses easily).
+3. Make necessary edits, and review changes on both a desktop screen and a mobile screen. Test with many aspect ratios to make sure nothing clips or looks broken. `npm run dev` serves mock chat responses with markdown in them, so check that responses stay clear and legible (this is important — users must be able to read ChatDKU's answers easily). Set `MOCK_API=false` in `.env.local` to hit the real backend instead, which needs internal network access.
 4. Use `npm run test` to run all tests for essential functionality. 
 5. Check that `npm run build` succeeds before pushing to the main branch.
 
 ### Deploying to production:
 
-1. Run `sudo bash deploy.sh` to run the deployment script. It will go through the entire test suite and deploy the frontend as well as create a backup of the previous deployment in case a rollback is needed.  
-    This backup is stored at `/var/www/chatdku_webapp_backups`
-2. Visit [ChatDKU](https://chatdku.dukekunshan.edu.cn) in incognito mode. Make sure the chat responses are clear and legible.
-
-### Installing automated deployment services:
-
-There are two systemd services that automate deployment maintenance:
-
-- **`chatdku-deploy`** — Checks if the frontend is present at `/var/www/chatdku`. If it's missing or empty (e.g. after a reboot or accidental deletion), it automatically rebuilds and redeploys. Runs 2 minutes after boot and every 15 minutes thereafter.
-- **`chatdku-cleanup-backups`** — Removes deployment backups in `/var/www/chatdku_webapp_backups` that are older than 30 days. Runs once daily.
-
-To install and activate both services:
+The app runs as a long-lived `npm start` process inside a tmux session on GPU4, serving port 3000. Deploying means rebuilding in place and restarting that process:
 
 ```bash
-sudo cp chatdku-deploy.service chatdku-deploy.timer /etc/systemd/system/
-sudo cp chatdku-cleanup-backups.service chatdku-cleanup-backups.timer /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now chatdku-deploy.timer chatdku-cleanup-backups.timer
+git pull
+npm ci
+npm run build
 ```
 
-To check their statuses:
+Then attach to the tmux session running the app, stop it with `Ctrl-C`, and start the new build:
 
 ```bash
-systemctl list-timers chatdku-*
-sudo journalctl -u chatdku-deploy.service -e
-sudo journalctl -u chatdku-cleanup-backups.service -e
+npm start
 ```
+
+Detach with `Ctrl-B D` — closing the terminal without detaching kills the server.
+
+Afterwards, visit [ChatDKU](https://chatdku.dukekunshan.edu.cn) in incognito mode. Make sure a chat response streams in and is clear and legible.
+
+> **Rollback**: there is no build backup to restore any more — `git checkout <last-good-commit>` and rebuild.
