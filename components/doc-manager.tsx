@@ -45,23 +45,23 @@ export function DocumentManager({ open, onOpenChange }: DocumentManagerProps) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (open) {
-      loadDocuments();
-    }
-  }, [open]);
-
-  const loadDocuments = async () => {
+  const loadDocuments = useCallback(async () => {
     setIsLoading(true);
     try {
-      // const docs = await userAPI.getUploadedDocuments();
-      // setDocuments(docs);
-    } catch (error) {
+      const docs = await userAPI.getUploadedDocuments();
+      setDocuments(docs);
+    } catch {
       setError("Failed to load documents");
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (open) {
+      loadDocuments();
+    }
+  }, [open, loadDocuments]);
 
   const handleFileUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -120,16 +120,15 @@ export function DocumentManager({ open, onOpenChange }: DocumentManagerProps) {
 
   const handleDeleteDocument = async (documentId: string, filename: string) => {
     try {
-      const success = await userAPI.deleteDocument(documentId);
-      if (success) {
-        setDocuments((prev) => prev.filter((doc) => doc.id !== documentId));
-        setSuccess(`Successfully deleted ${filename}`);
-        setTimeout(() => setSuccess(null), 2000);
-      } else {
-        setError("Failed to delete document");
-      }
+      await userAPI.deleteDocument(documentId);
+      setDocuments((prev) => prev.filter((doc) => doc.id !== documentId));
+      setSuccess(`Successfully deleted ${filename}`);
+      setTimeout(() => setSuccess(null), 2000);
     } catch (error) {
-      setError("Failed to delete document");
+      // UploadView has no delete route yet, so say so instead of "failed".
+      setError(
+        error instanceof Error ? error.message : "Failed to delete document",
+      );
     }
   };
 
@@ -156,16 +155,6 @@ export function DocumentManager({ open, onOpenChange }: DocumentManagerProps) {
     setDragActive(false);
     handleFileUpload(e.dataTransfer.files);
   }, []);
-
-  const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return "0 Bytes";
-    const k = 1024;
-    const sizes = ["Bytes", "KB", "MB", "GB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return (
-      Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
-    );
-  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -283,10 +272,13 @@ export function DocumentManager({ open, onOpenChange }: DocumentManagerProps) {
                             <p className="font-medium truncate">
                               {doc.filename}
                             </p>
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                              <span>{formatFileSize(doc.size)}</span>
-                              <span>{doc.uploadedAt.toLocaleDateString()}</span>
-                            </div>
+                            {/* UploadView lists filenames only; a date exists
+                                only for uploads made in this session. */}
+                            {doc.uploadedAt && (
+                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <span>{doc.uploadedAt.toLocaleDateString()}</span>
+                              </div>
+                            )}
                           </div>
                         </div>
                         <div className="flex items-center gap-2">

@@ -1,26 +1,50 @@
-const isDevMode = process.env.NODE_ENV === 'development';
-const apiBaseUrl = isDevMode ? 'http://localhost:3000' : 'https://chatdku.dukekunshan.edu.cn';
+// Every endpoint below is a same-origin path that mirrors the Django backend's
+// own URL structure (lib/server/backend.ts documents the full API), so the
+// browser, this app's proxy routes and Django all agree on one set of paths.
+//
+// The trailing slashes are load-bearing: Django's router redirects a slashless
+// PATCH/DELETE into a GET.
 
 export const API_ENDPOINTS = {
-    USER: `${apiBaseUrl}/user`,
-    CHAT_DEFAULT: `${apiBaseUrl}/api/chat`,
-    CHAT_DEV1: `${apiBaseUrl}/dev/ant/chat`,
-    CHAT_DEV2: `${apiBaseUrl}/dev/qwen/chat`,
-    FILE_UPLOAD: `${apiBaseUrl}/user_files`,
-    DICTATION_WS: isDevMode ? 'ws://localhost:8007' : 'wss://chatdku.dukekunshan.edu.cn:8007',
-    // Session management uses local Next.js API routes
-    NEW_SESSION: '/api/get_session',
-    CONVERSATIONS: '/api/c/',
-    SESSION_MESSAGES: (sessionId: string) =>
-      `/api/c/${sessionId}/messages`,
-  } as const;
-  
-  export const CHAT_MODELS = [
-    {
-      id: "default",
-      name: "Default Model",
-      endpoint: API_ENDPOINTS.CHAT_DEFAULT,
-    },
-    { id: "ant", name: "Ant Model", endpoint: API_ENDPOINTS.CHAT_DEV1 },
-    { id: "qwen", name: "Qwen Model", endpoint: API_ENDPOINTS.CHAT_DEV2 },
-  ] as const;
+  /**
+   * core.views.HealthView -> { netid, username, role }
+   *
+   * No trailing slash, deliberately. Apache proxies `/user` to
+   * `http://127.0.0.1:8009/user/`, and because the two sides of that rule
+   * disagree about the trailing slash, anything after `/user` is appended to a
+   * path that already ends in one. `/user` sends an empty remainder and lands
+   * on `/user/` correctly; `/user/` would arrive as `/user//`, which Django's
+   * resolver does not match (it never collapses repeated slashes) — a 404.
+   */
+  USER: '/user',
+  /**
+   * core.views.UploadView -> GET { netid, document[] }, POST multipart field `file_`
+   *
+   * Same rule, and here it bites: this arrives at Django as `/user//upload`
+   * and 404s. Uploads cannot work through Apache until the vhost rule is
+   * balanced (`ProxyPass /user/ http://127.0.0.1:8009/user/`), so treat this
+   * endpoint as dev-only for now.
+   */
+  FILE_UPLOAD: '/user/upload',
+  /** chat.views.Chat -> 202 { chatId, sessionId } */
+  CHAT: '/api/chat',
+  /** chat.views.ChatStream -> text/event-stream */
+  CHAT_STREAM: (chatId: string, sessionId: string) =>
+    `/api/chat/${encodeURIComponent(chatId)}?sessionId=${encodeURIComponent(sessionId)}`,
+  /** chat.views.FeedbackView */
+  FEEDBACK: '/api/feedback',
+  /** SessionViewSet.create_session -> 201 { session_id } */
+  NEW_SESSION: '/api/c/create_session/',
+  /** SessionViewSet.list -> [{ id, title, created_at }] */
+  CONVERSATIONS: '/api/c/',
+  /** SessionViewSet.messages -> [{ id, role, message, created_at }] */
+  SESSION_MESSAGES: (sessionId: string) => `/api/c/${encodeURIComponent(sessionId)}/messages/`,
+  /** SessionViewSet.rename -> { id, title } */
+  RENAME_SESSION: (sessionId: string) => `/api/c/${encodeURIComponent(sessionId)}/rename/`,
+  /** SessionViewSet.destroy -> 204 */
+  DELETE_SESSION: (sessionId: string) => `/api/c/${encodeURIComponent(sessionId)}/`,
+  DICTATION_WS:
+    process.env.NODE_ENV === 'development'
+      ? 'ws://localhost:8007'
+      : 'wss://chatdku.dukekunshan.edu.cn:8007',
+} as const;

@@ -1,51 +1,32 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { backendFetch, backendUnreachable, relayResponse, isMockApi } from '@/lib/server/backend';
 
-// Receive the user message and return the chatId and sessionId
+// POST /api/chat -> Django chat.views.Chat
+// Body: { chatHistoryId, messages: [{role, content}], mode?: "default"|"agent", sources?: string[] }
+// Returns 202 { chatId, sessionId }; the answer itself streams from
+// GET /api/chat/{chatId}?sessionId=… (see ./[chatId]/route.ts).
 export async function POST(request: NextRequest) {
-  const body = await request.json();
-  const useMock = process.env.NODE_ENV === 'development' && process.env.MOCK_API !== 'false';
+  const body = await request.json().catch(() => null);
 
-if (!useMock) {
-    try {
-      console.log('Proxying chat request to backend...');
-      
-      const backendResponse = await fetch('http://10.200.14.39:8999/api/chat', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Cookie': request.headers.get('cookie') || '',
-        },
-        body: JSON.stringify(body),
-      });
-
-      if (!backendResponse.ok) {
-        const errorText = await backendResponse.text();
-        console.error('Backend error:', backendResponse.status, errorText);
-        return NextResponse.json(
-          { error: `Backend error: ${errorText}` },
-          { status: backendResponse.status }
-        );
-      }
-
-      const data = await backendResponse.json();
-      return NextResponse.json(data);
-    } catch (error) {
-      console.error('Backend connection error:', error);
-      return NextResponse.json(
-        { error: error instanceof Error ? error.message : 'Unknown error' },
-        { status: 500 }
-      );
-    }
+  if (body === null) {
+    return Response.json({ error: 'Invalid request body' }, { status: 400 });
   }
 
-  // Mock mode
-  const mockChatId = `mock-chat-${Date.now()}`;
-  const mockSessionId = body?.chatHistoryId || `mock-session-${Date.now()}`;
+  if (!body.chatHistoryId) {
+    return Response.json({ error: 'chatHistoryId is required' }, { status: 400 });
+  }
 
-  console.log('Mock POST /api/chat → returning chatId:', mockChatId);
+  if (isMockApi()) {
+    return Response.json(
+      { chatId: `mock-chat-${Date.now()}`, sessionId: body.chatHistoryId },
+      { status: 202 },
+    );
+  }
 
-  return NextResponse.json({
-    chatId: mockChatId,
-    sessionId: mockSessionId,
-  });
+  try {
+    const response = await backendFetch(request, '/api/chat', { method: 'POST', body });
+    return relayResponse(response);
+  } catch (error) {
+    return backendUnreachable('api/chat POST', error);
+  }
 }

@@ -1,341 +1,201 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useRouter } from 'next/navigation';
+import Cookies from 'js-cookie';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import ChatPage from './ChatPage';
+import * as convos from '@/lib/convosNew';
 
-// Mock the feedback functionality from ChatPage
-const createFeedbackComponent = () => {
-  const handleFeedback = jest.fn();
-  
-  const FeedbackComponent = ({ userMessage, botResponse }: any) => {
-    const [showDialog, setShowDialog] = React.useState(false);
-    const [selectedReason, setSelectedReason] = React.useState('');
-    const [customReason, setCustomReason] = React.useState('');
-    const [feedbackSubmitted, setFeedbackSubmitted] = React.useState(false);
+// The feedback UI is built imperatively inside ChatPage once an answer lands,
+// so these tests drive a whole turn and then interact with the controls.
 
-    const handleYesClick = () => {
-      handleFeedback(userMessage, botResponse, 'helpful');
-      setFeedbackSubmitted(true);
-    };
-
-    const handleNoClick = () => {
-      setShowDialog(true);
-    };
-
-    const handleReasonSelect = (reason: string) => {
-      setSelectedReason(reason);
-      if (reason !== 'other') {
-        setCustomReason('');
-      }
-    };
-
-    const handleSubmit = () => {
-      if (!selectedReason) return;
-      
-      const reasonToSend = selectedReason === 'other' ? customReason : selectedReason;
-      if (selectedReason === 'other' && !customReason.trim()) {
-        return;
-      }
-      
-      handleFeedback(userMessage, botResponse, reasonToSend);
-      setShowDialog(false);
-      setFeedbackSubmitted(true);
-    };
-
-    const handleCancel = () => {
-      setShowDialog(false);
-      setSelectedReason('');
-      setCustomReason('');
-    };
-
-    if (feedbackSubmitted) {
-      return <span data-testid="feedback-thanks">Thanks for your feedback!</span>;
-    }
-
-    return (
-      <div data-testid="feedback-component">
-        <div className="flex items-center gap-2">
-          <span className="text-sm">Was this response helpful?</span>
-          <button data-testid="feedback-yes" onClick={handleYesClick}>Yes</button>
-          <button data-testid="feedback-no" onClick={handleNoClick}>No</button>
-        </div>
-        
-        {showDialog && (
-          <div data-testid="feedback-dialog">
-            <h3>Sorry to hear that. Can you tell us why?</h3>
-            <div data-testid="reason-options">
-              <button 
-                data-testid="reason-not-correct" 
-                onClick={() => handleReasonSelect('not_correct')}
-                className={selectedReason === 'not_correct' ? 'selected' : ''}
-              >
-                Not Correct
-              </button>
-              <button 
-                data-testid="reason-not-clear" 
-                onClick={() => handleReasonSelect('not_clear')}
-                className={selectedReason === 'not_clear' ? 'selected' : ''}
-              >
-                Not Clear
-              </button>
-              <button 
-                data-testid="reason-not-relevant" 
-                onClick={() => handleReasonSelect('not_relevant')}
-                className={selectedReason === 'not_relevant' ? 'selected' : ''}
-              >
-                Not Relevant
-              </button>
-              <button 
-                data-testid="reason-other" 
-                onClick={() => handleReasonSelect('other')}
-                className={selectedReason === 'other' ? 'selected' : ''}
-              >
-                Other
-              </button>
-            </div>
-            
-            {selectedReason === 'other' && (
-              <textarea
-                data-testid="custom-reason"
-                value={customReason}
-                onChange={(e) => setCustomReason(e.target.value)}
-                placeholder="Please describe the issue"
-                rows={3}
-              />
-            )}
-            
-            <div className="flex gap-2">
-              <button data-testid="submit-feedback" onClick={handleSubmit}>Submit</button>
-              <button data-testid="cancel-feedback" onClick={handleCancel}>Cancel</button>
-            </div>
-          </div>
-        )}
-      </div>
-    );
+vi.mock('next/navigation', () => ({ useRouter: vi.fn() }));
+vi.mock('js-cookie', () => ({ default: { get: vi.fn(), set: vi.fn() } }));
+vi.mock('@/lib/convosNew', async (importOriginal) => {
+  const actual = await importOriginal<typeof convos>();
+  return {
+    ...actual,
+    getNewSession: vi.fn(),
+    getCurrentSessionId: vi.fn(),
+    getSessionMessages: vi.fn(),
+    getStoredEndpoint: vi.fn(() => '/api/chat'),
   };
+});
+vi.mock('@/components/ui/ai-input', () => ({
+  AIInput: ({ onSubmit }: { onSubmit?: (value: string) => void }) => (
+    <button data-testid="submit" onClick={() => onSubmit?.('What are the dining hours?')}>
+      Send
+    </button>
+  ),
+}));
+vi.mock('@/components/navbar', () => ({ Navbar: () => <nav /> }));
+vi.mock('@/components/side', () => ({ __esModule: true, default: () => <div /> }));
+vi.mock('@/components/WelcomeBanner', () => ({ __esModule: true, default: () => <div /> }));
+vi.mock('@/components/doc-manager', () => ({ DocumentManager: () => <div /> }));
+vi.mock('@/components/prompt_recs', () => ({ PromptRecs: () => <div /> }));
+vi.mock('@/components/CampusMap', () => ({ __esModule: true, default: () => <div /> }));
+vi.mock('@/components/academic-calendar', () => ({ __esModule: true, default: () => <div /> }));
 
-  return { FeedbackComponent, handleFeedback };
-};
+const SESSION = '08d8d518-bc9a-4f25-8e1a-8b6f3264f59b';
+const ANSWER = 'Marketplace serves dinner until 8pm.';
 
-describe('Feedback System', () => {
-  const { FeedbackComponent, handleFeedback } = createFeedbackComponent();
+const mockFetch = vi.fn();
 
-  beforeEach(() => {
-    jest.clearAllMocks();
+const streamResponse = (body: string) => ({
+  ok: true,
+  status: 200,
+  body: {
+    getReader() {
+      const encoder = new TextEncoder();
+      let sent = false;
+      return {
+        read: async () =>
+          sent
+            ? { done: true, value: undefined }
+            : ((sent = true), { done: false, value: encoder.encode(body) }),
+      };
+    },
+  },
+});
+
+const feedbackCalls = () =>
+  mockFetch.mock.calls.filter(([url]) => url === '/api/feedback');
+
+/** Runs one full turn so the feedback controls are on screen. */
+async function completeATurn() {
+  const user = userEvent.setup();
+  render(<ChatPage />);
+  await user.click(await screen.findByTestId('submit'));
+  await waitFor(() => expect(screen.getByText('Was this response helpful?')).toBeInTheDocument());
+  return user;
+}
+
+beforeEach(() => {
+  vi.stubGlobal('fetch', mockFetch);
+  mockFetch.mockReset();
+  mockFetch.mockImplementation(async (url: string, init?: RequestInit) => {
+    if (url === '/api/feedback') return { ok: true, status: 201, json: async () => ({ message: 'ok' }) };
+    if ((init?.method ?? 'GET') === 'POST') {
+      return { ok: true, status: 202, json: async () => ({ chatId: 'chat-1', sessionId: SESSION }) };
+    }
+    return streamResponse(
+      `data: ${JSON.stringify({ type: 'chunk', stage: 'generation', content: ANSWER })}\n\n` +
+        `data: ${JSON.stringify({ type: 'end', stage: 'end', content: '' })}\n\n`,
+    );
   });
 
-  it('renders feedback buttons', () => {
-    render(<FeedbackComponent userMessage="Test" botResponse="Response" />);
-    
-    expect(screen.getByText('Was this response helpful?')).toBeInTheDocument();
-    expect(screen.getByTestId('feedback-yes')).toBeInTheDocument();
-    expect(screen.getByTestId('feedback-no')).toBeInTheDocument();
+  vi.mocked(useRouter).mockReturnValue({ push: vi.fn() } as unknown as ReturnType<typeof useRouter>);
+  vi.mocked(Cookies.get).mockReturnValue('true' as unknown as ReturnType<typeof Cookies.get>);
+  vi.mocked(convos.getCurrentSessionId).mockReturnValue(SESSION);
+  vi.mocked(convos.getNewSession).mockResolvedValue(SESSION);
+  vi.mocked(convos.getSessionMessages).mockResolvedValue([]);
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe('positive feedback', () => {
+  it('posts the question, answer and session, then thanks the user', async () => {
+    const user = await completeATurn();
+
+    await user.click(screen.getByRole('button', { name: 'Yes' }));
+
+    await waitFor(() => expect(feedbackCalls()).toHaveLength(1));
+    expect(JSON.parse(feedbackCalls()[0][1].body)).toEqual({
+      userInput: 'What are the dining hours?',
+      botAnswer: ANSWER,
+      feedbackReason: 'helpful',
+      chatHistoryId: SESSION,
+    });
+    expect(screen.getByText('Thanks for your feedback!')).toBeInTheDocument();
+  });
+});
+
+describe('negative feedback', () => {
+  it('asks for a reason and submits the chosen one', async () => {
+    const user = await completeATurn();
+
+    await user.click(screen.getByRole('button', { name: 'No' }));
+    expect(screen.getByText(/Sorry to hear that/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Not Correct' }));
+    await user.click(screen.getByRole('button', { name: 'Submit' }));
+
+    await waitFor(() => expect(feedbackCalls()).toHaveLength(1));
+    expect(JSON.parse(feedbackCalls()[0][1].body).feedbackReason).toBe('not_correct');
+    expect(screen.getByText('Thanks for your feedback!')).toBeInTheDocument();
   });
 
-  it('handles positive feedback', async () => {
-    const user = userEvent.setup();
-    render(<FeedbackComponent userMessage="Test question" botResponse="Test answer" />);
-    
-    const yesButton = screen.getByTestId('feedback-yes');
-    await user.click(yesButton);
-    
-    expect(handleFeedback).toHaveBeenCalledWith('Test question', 'Test answer', 'helpful');
-    expect(screen.getByTestId('feedback-thanks')).toBeInTheDocument();
+  it('requires a reason before submitting', async () => {
+    const user = await completeATurn();
+
+    await user.click(screen.getByRole('button', { name: 'No' }));
+    await user.click(screen.getByRole('button', { name: 'Submit' }));
+
+    expect(feedbackCalls()).toHaveLength(0);
   });
 
-  it('opens feedback dialog for negative feedback', async () => {
-    const user = userEvent.setup();
-    render(<FeedbackComponent userMessage="Test" botResponse="Response" />);
-    
-    const noButton = screen.getByTestId('feedback-no');
-    await user.click(noButton);
-    
-    expect(screen.getByTestId('feedback-dialog')).toBeInTheDocument();
-    expect(screen.getByText('Sorry to hear that. Can you tell us why?')).toBeInTheDocument();
+  it('collects free text when "Other" is chosen', async () => {
+    const user = await completeATurn();
+
+    await user.click(screen.getByRole('button', { name: 'No' }));
+    await user.click(screen.getByRole('button', { name: 'Other' }));
+
+    const textarea = screen.getByPlaceholderText('Please describe the issue');
+    expect(textarea).toBeVisible();
+
+    await user.type(textarea, 'The 食堂 closes at 20:00, not 8pm — <check this>');
+    await user.click(screen.getByRole('button', { name: 'Submit' }));
+
+    await waitFor(() => expect(feedbackCalls()).toHaveLength(1));
+    expect(JSON.parse(feedbackCalls()[0][1].body).feedbackReason).toBe(
+      'The 食堂 closes at 20:00, not 8pm — <check this>',
+    );
   });
 
-  it('displays all reason options in dialog', async () => {
-    const user = userEvent.setup();
-    render(<FeedbackComponent userMessage="Test" botResponse="Response" />);
-    
-    await user.click(screen.getByTestId('feedback-no'));
-    
-    expect(screen.getByTestId('reason-not-correct')).toBeInTheDocument();
-    expect(screen.getByTestId('reason-not-clear')).toBeInTheDocument();
-    expect(screen.getByTestId('reason-not-relevant')).toBeInTheDocument();
-    expect(screen.getByTestId('reason-other')).toBeInTheDocument();
+  it('refuses an empty "Other" and prompts for text', async () => {
+    const user = await completeATurn();
+
+    await user.click(screen.getByRole('button', { name: 'No' }));
+    await user.click(screen.getByRole('button', { name: 'Other' }));
+    await user.click(screen.getByRole('button', { name: 'Submit' }));
+
+    expect(feedbackCalls()).toHaveLength(0);
+    expect(screen.getByPlaceholderText('Please write something!')).toBeInTheDocument();
   });
 
-  it('allows selecting predefined reasons', async () => {
-    const user = userEvent.setup();
-    render(<FeedbackComponent userMessage="Test" botResponse="Response" />);
-    
-    await user.click(screen.getByTestId('feedback-no'));
-    await user.click(screen.getByTestId('reason-not-correct'));
-    
-    expect(screen.getByTestId('reason-not-correct')).toHaveClass('selected');
+  it('can be cancelled without sending anything', async () => {
+    const user = await completeATurn();
+
+    await user.click(screen.getByRole('button', { name: 'No' }));
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(feedbackCalls()).toHaveLength(0);
+    expect(screen.getByText('Feedback canceled.')).toBeInTheDocument();
   });
 
-  it('shows custom reason textarea when "Other" is selected', async () => {
-    const user = userEvent.setup();
-    render(<FeedbackComponent userMessage="Test" botResponse="Response" />);
-    
-    await user.click(screen.getByTestId('feedback-no'));
-    await user.click(screen.getByTestId('reason-other'));
-    
-    expect(screen.getByTestId('custom-reason')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Please describe the issue')).toBeInTheDocument();
-  });
+  it('carries a long answer through to the backend', async () => {
+    const user = await completeATurn();
 
-  it('submits feedback with predefined reason', async () => {
-    const user = userEvent.setup();
-    render(<FeedbackComponent userMessage="Test question" botResponse="Test answer" />);
-    
-    await user.click(screen.getByTestId('feedback-no'));
-    await user.click(screen.getByTestId('reason-not-clear'));
-    await user.click(screen.getByTestId('submit-feedback'));
-    
-    expect(handleFeedback).toHaveBeenCalledWith('Test question', 'Test answer', 'not_clear');
-    expect(screen.getByTestId('feedback-thanks')).toBeInTheDocument();
-  });
+    await user.click(screen.getByRole('button', { name: 'Yes' }));
 
-  it('submits feedback with custom reason', async () => {
-    const user = userEvent.setup();
-    render(<FeedbackComponent userMessage="Test question" botResponse="Test answer" />);
-    
-    await user.click(screen.getByTestId('feedback-no'));
-    await user.click(screen.getByTestId('reason-other'));
-    await user.type(screen.getByTestId('custom-reason'), 'Custom feedback reason');
-    await user.click(screen.getByTestId('submit-feedback'));
-    
-    expect(handleFeedback).toHaveBeenCalledWith('Test question', 'Test answer', 'Custom feedback reason');
-    expect(screen.getByTestId('feedback-thanks')).toBeInTheDocument();
+    await waitFor(() => expect(feedbackCalls()).toHaveLength(1));
+    expect(JSON.parse(feedbackCalls()[0][1].body).botAnswer).toBe(ANSWER);
   });
+});
 
-  it('validates custom reason is required when "Other" is selected', async () => {
-    const user = userEvent.setup();
-    render(<FeedbackComponent userMessage="Test" botResponse="Response" />);
-    
-    await user.click(screen.getByTestId('feedback-no'));
-    await user.click(screen.getByTestId('reason-other'));
-    await user.click(screen.getByTestId('submit-feedback'));
-    
-    // Should not submit feedback
-    expect(handleFeedback).not.toHaveBeenCalled();
-    expect(screen.getByTestId('feedback-dialog')).toBeInTheDocument();
-  });
+describe('failures', () => {
+  it('still thanks the user when the backend rejects the feedback', async () => {
+    const user = await completeATurn();
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url === '/api/feedback') throw new Error('offline');
+      return { ok: false, status: 500 };
+    });
 
-  it('cancels feedback dialog', async () => {
-    const user = userEvent.setup();
-    render(<FeedbackComponent userMessage="Test" botResponse="Response" />);
-    
-    await user.click(screen.getByTestId('feedback-no'));
-    await user.click(screen.getByTestId('reason-not-correct'));
-    await user.click(screen.getByTestId('cancel-feedback'));
-    
-    expect(screen.queryByTestId('feedback-dialog')).not.toBeInTheDocument();
-    expect(handleFeedback).not.toHaveBeenCalled();
-  });
+    await user.click(screen.getByRole('button', { name: 'Yes' }));
 
-  it('clears selection when dialog is cancelled', async () => {
-    const user = userEvent.setup();
-    render(<FeedbackComponent userMessage="Test" botResponse="Response" />);
-    
-    await user.click(screen.getByTestId('feedback-no'));
-    await user.click(screen.getByTestId('reason-not-correct'));
-    await user.click(screen.getByTestId('cancel-feedback'));
-    
-    // Reopen dialog to verify selection is cleared
-    await user.click(screen.getByTestId('feedback-no'));
-    expect(screen.getByTestId('reason-not-correct')).not.toHaveClass('selected');
-  });
-
-  it('hides custom reason when switching from Other to predefined reason', async () => {
-    const user = userEvent.setup();
-    render(<FeedbackComponent userMessage="Test" botResponse="Response" />);
-    
-    await user.click(screen.getByTestId('feedback-no'));
-    await user.click(screen.getByTestId('reason-other'));
-    expect(screen.getByTestId('custom-reason')).toBeInTheDocument();
-    
-    await user.click(screen.getByTestId('reason-not-correct'));
-    expect(screen.queryByTestId('custom-reason')).not.toBeInTheDocument();
-  });
-
-  it('handles multiple feedback submissions on same message', async () => {
-    const user = userEvent.setup();
-    const { rerender } = render(<FeedbackComponent userMessage="Test" botResponse="Response" />);
-    
-    // Submit positive feedback
-    await user.click(screen.getByTestId('feedback-yes'));
-    expect(screen.getByTestId('feedback-thanks')).toBeInTheDocument();
-    
-    // Reset and submit negative feedback
-    rerender(<FeedbackComponent userMessage="Test2" botResponse="Response2" />);
-    await user.click(screen.getByTestId('feedback-no'));
-    await user.click(screen.getByTestId('reason-not-relevant'));
-    await user.click(screen.getByTestId('submit-feedback'));
-    
-    expect(handleFeedback).toHaveBeenCalledTimes(2);
-  });
-
-  it('handles long custom feedback', async () => {
-    const user = userEvent.setup();
-    const longFeedback = 'A'.repeat(1000);
-    
-    render(<FeedbackComponent userMessage="Test" botResponse="Response" />);
-    
-    await user.click(screen.getByTestId('feedback-no'));
-    await user.click(screen.getByTestId('reason-other'));
-    await user.type(screen.getByTestId('custom-reason'), longFeedback);
-    await user.click(screen.getByTestId('submit-feedback'));
-    
-    expect(handleFeedback).toHaveBeenCalledWith('Test', 'Response', longFeedback);
-  });
-
-  it('handles special characters in custom feedback', async () => {
-    const user = userEvent.setup();
-    const specialFeedback = 'Feedback with & < > " \' characters';
-    
-    render(<FeedbackComponent userMessage="Test" botResponse="Response" />);
-    
-    await user.click(screen.getByTestId('feedback-no'));
-    await user.click(screen.getByTestId('reason-other'));
-    await user.type(screen.getByTestId('custom-reason'), specialFeedback);
-    await user.click(screen.getByTestId('submit-feedback'));
-    
-    expect(handleFeedback).toHaveBeenCalledWith('Test', 'Response', specialFeedback);
-  });
-
-  it('prevents submission without selecting a reason', async () => {
-    const user = userEvent.setup();
-    render(<FeedbackComponent userMessage="Test" botResponse="Response" />);
-    
-    await user.click(screen.getByTestId('feedback-no'));
-    await user.click(screen.getByTestId('submit-feedback'));
-    
-    expect(handleFeedback).not.toHaveBeenCalled();
-    expect(screen.getByTestId('feedback-dialog')).toBeInTheDocument();
-  });
-
-  it('handles keyboard navigation', async () => {
-    const user = userEvent.setup();
-    render(<FeedbackComponent userMessage="Test" botResponse="Response" />);
-    
-    // Tab to Yes button and press Enter
-    screen.getByTestId('feedback-yes').focus();
-    await user.keyboard('{Enter}');
-    
-    expect(handleFeedback).toHaveBeenCalledWith('Test', 'Response', 'helpful');
-  });
-
-  it('maintains focus state in dialog', async () => {
-    const user = userEvent.setup();
-    render(<FeedbackComponent userMessage="Test" botResponse="Response" />);
-    
-    await user.click(screen.getByTestId('feedback-no'));
-    
-    const firstReason = screen.getByTestId('reason-not-correct');
-    firstReason.focus();
-    expect(firstReason).toHaveFocus();
+    await waitFor(() => expect(screen.getByText('Thanks for your feedback!')).toBeInTheDocument());
   });
 });

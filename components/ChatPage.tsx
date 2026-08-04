@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useCallback, useEffect, SetStateAction } from "react";
-import { marked } from "marked";
+import { useState, useCallback, useEffect, useRef, SetStateAction } from "react";
+
 import { useRouter } from "next/navigation";
 import Cookies from "js-cookie";
 import {
@@ -21,52 +21,21 @@ import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import CampusMap from "@/components/CampusMap";
 import AcademicCalendar from "@/components/academic-calendar";
+import { API_ENDPOINTS } from "@/lib/constants";
+import {
+	configureMarked,
+	eventText,
+	parseFrame,
+	parseMarkdown,
+	splitFrames,
+	stripThinkBlocks,
+	type StreamEvent,
+} from "@/lib/chat-stream";
 
 type ChatPageProps = {
 	isDev?: boolean;
 };
 
-const configureMarked = () => {
-	marked.setOptions({
-		breaks: true,
-		gfm: true,
-	});
-};
-
-const parseMarkdown = (content: string): string => {
-	if (!content) return "";
-	const cleanedContent = content.replace(/<think>[\s\S]*?<\/think>/gi, "");
-	const parsed = marked.parse(cleanedContent) as any;
-	if (typeof parsed?.then === "function") {
-		return cleanedContent;
-	}
-	return typeof parsed === "string" && parsed.trim().length > 0
-		? parsed
-		: cleanedContent;
-};
-
-type StreamEvent = {
-  type: "reasoning" | "chunk" | "error" | "end";
-  stage: string;
-  content: string;
-};
-
-const parseThinkingStream = (text: string): { thinking: string; response: string } => {
-	const lines = text.split("\n");
-	const thinkingLines: string[] = [];
-	let responseStart = -1;
-	for (let i = 0; i < lines.length; i++) {
-		if (lines[i].startsWith("[THINKING]:")) {
-			thinkingLines.push(lines[i].slice("[THINKING]:".length));
-		} else {
-			responseStart = i;
-			break;
-		}
-	}
-	const response =
-		responseStart >= 0 ? lines.slice(responseStart).join("\n").trimStart() : "";
-	return { thinking: thinkingLines.join("\n"), response };
-};
 
 const ensureThinkingBoxStyles = () => {
 	if (typeof document === "undefined") return;
@@ -230,6 +199,52 @@ const streamSSEFromReader = async (
 	streamContainer.innerHTML = "";
 	streamContainer.appendChild(contentDiv);
 
+	const dismissThinkingBox = () => {
+		if (!thinkingBox) return;
+		const box = thinkingBox;
+		thinkingBox = null;
+		void box.dismiss();
+	};
+
+	const renderAnswer = () => {
+		contentDiv.innerHTML = parseMarkdown(stripThinkBlocks(fullAnswer));
+	};
+
+	const handleEvent = (event: StreamEvent) => {
+		switch (event.type) {
+			case "reasoning":
+				if (!thinkingBox) thinkingBox = createThinkingBox(streamContainer);
+				thinkingBox.updateContent(
+					event.content ? `[${event.stage}] ${event.content}` : `[${event.stage}]`,
+				);
+				break;
+			// Django unpacks chunk_batch into individual chunks, but the agent's
+			// EventStream emits the batch — eventText handles both.
+			case "chunk":
+			case "chunk_batch":
+				dismissThinkingBox();
+				fullAnswer += eventText(event);
+				renderAnswer();
+				break;
+			case "error":
+				dismissThinkingBox();
+				console.error("Agent stream error:", event.content);
+				if (!fullAnswer) {
+					contentDiv.textContent =
+						"Something went wrong while generating a response. Please try again.";
+				}
+				break;
+			case "end":
+				dismissThinkingBox();
+				break;
+		}
+	};
+
+	const handleFrame = (frame: string) => {
+		const event = parseFrame(frame);
+		if (event) handleEvent(event);
+	};
+
 	try {
 		while (true) {
 			const { done, value } = await reader.read();
@@ -237,235 +252,24 @@ const streamSSEFromReader = async (
 
 			buffer += decoder.decode(value, { stream: true });
 
-
-			const parts = buffer.split("\n\n");
-			buffer = parts.pop() || "";
-
-			for (const part of parts) {
-				if (!part.trim()) continue;
-				console.log('SSE part:', JSON.stringify(part));
-
-
-				const lines = part.split("\n");
-				let dataLine = "";
-				for (const line of lines) {
-					if (line.startsWith("data: ")) {
-						dataLine = line.slice(6); 
-						break;
-					}
-				}
-				if (!dataLine) continue;
-				console.log('Parsed data:', dataLine);
-
-				let event: StreamEvent | null = null;
-				try {
-					event = JSON.parse(dataLine) as StreamEvent;
-				} catch {
-					continue;
-				}
-
-				const eventData = (event as any).data || event;
-				const { type, stage, content } = eventData;
-
-				if (type === "reasoning") {
-					if (!thinkingBox) {
-						thinkingBox = createThinkingBox(streamContainer);
-					}
-					const displayText = content
-						? `[${stage}] ${content}`
-						: `[${stage}]`;
-					thinkingBox.updateContent(displayText);
-				} else if (type === "chunk") {
-					if (thinkingBox) {
-						const box = thinkingBox;
-						thinkingBox = null;
-						void box.dismiss();
-					}
-					fullAnswer += content;
-					const cleaned = fullAnswer.replace(/<think>[\s\S]*?<\/think>/gi, "");
-					contentDiv.innerHTML = parseMarkdown(cleaned);
-				} else if (type === "error") {
-					if (thinkingBox) {
-						const box = thinkingBox;
-						thinkingBox = null;
-						void box.dismiss();
-					}
-					console.error("Agent stream error:", content);
-					if (!fullAnswer) {
-						contentDiv.textContent =
-							"Something went wrong while generating a response. Please try again.";
-					}
-				} else if (type === "end") {
-					if (thinkingBox) {
-						const box = thinkingBox;
-						thinkingBox = null;
-						void box.dismiss();
-					}
-				}
-			}
+			const { frames, rest } = splitFrames(buffer);
+			buffer = rest;
+			frames.forEach(handleFrame);
 
 			chatLog.scrollTo(0, chatLog.scrollHeight);
 		}
 
-		if (buffer.trim()) {
-			const lines = buffer.split("\n");
-			for (const line of lines) {
-				if (line.startsWith("data: ")) {
-					try {
-						const event = JSON.parse(line.slice(6)) as StreamEvent;
-						if (event.type === "chunk") {
-							fullAnswer += event.content;
-						}
-					} catch { /* ignore */ }
-				}
-			}
-			const cleaned = fullAnswer.replace(/<think>[\s\S]*?<\/think>/gi, "");
-			contentDiv.innerHTML = parseMarkdown(cleaned);
-		}
+		// A stream that ends without a trailing blank line leaves one frame behind.
+		buffer += decoder.decode();
+		handleFrame(buffer);
 
-		if (thinkingBox) {
-			const box = thinkingBox;
-			thinkingBox = null;
-			void box.dismiss();
-		}
-
+		dismissThinkingBox();
 		return fullAnswer;
 	} catch (error) {
 		console.warn("SSE stream reading failed:", error);
-		if (thinkingBox) {
-			const box = thinkingBox;
-			thinkingBox = null;
-			void box.dismiss();
-		}
+		dismissThinkingBox();
 		return fullAnswer || "Error: Failed to read response";
 	}
-};
-
-const streamFromReader = async (
-	response: Response,
-	elementContainer: HTMLElement,
-	options?: {
-		onThinkingContent?: (content: string) => void;
-		onResponseStart?: () => void;
-	},
-): Promise<{ success: boolean; text: string }> => {
-	if (!response.body) {
-		return { success: false, text: "" };
-	}
-
-	let accumulated = "";
-	let responseStartNotified = false;
-	try {
-		const reader = response.body.getReader();
-		const decoder = new TextDecoder();
-		let firstChunk = true;
-
-		elementContainer.innerHTML = "";
-
-		const contentDiv = document.createElement("div");
-		contentDiv.className =
-			"text-foreground break-words overflow-wrap-anywhere markdown-content text-[0.9375rem]";
-		elementContainer.appendChild(contentDiv);
-
-		const renderChunk = () => {
-			if (options) {
-				const { thinking, response: responseText } = parseThinkingStream(accumulated);
-				if (thinking) options.onThinkingContent?.(thinking);
-				if (responseText && !responseStartNotified) {
-					responseStartNotified = true;
-					options.onResponseStart?.();
-				}
-				const textToRender = responseText || (!thinking ? accumulated : "");
-				if (textToRender) {
-					const cleaned = textToRender.replace(/<think>[\s\S]*?<\/think>/gi, "");
-					contentDiv.innerHTML = parseMarkdown(cleaned);
-				}
-			} else {
-				const cleaned = accumulated.replace(/<think>[\s\S]*?<\/think>/gi, "");
-				contentDiv.innerHTML = parseMarkdown(cleaned);
-			}
-		};
-
-		while (true) {
-			const { done, value } = await reader.read();
-			if (done) break;
-
-			if (firstChunk) {
-				console.log("begin response stream");
-				firstChunk = false;
-			}
-
-			accumulated += decoder.decode(value, { stream: true });
-			renderChunk();
-
-			const chatLog = document.getElementById("chat-log");
-			chatLog?.scrollTo(0, chatLog.scrollHeight);
-		}
-
-		accumulated += decoder.decode();
-		renderChunk();
-
-		return { success: true, text: accumulated };
-	} catch (error) {
-		console.warn("Stream reading failed, reverting to simulated stream", error);
-		return { success: false, text: accumulated };
-	}
-};
-
-const streamText = async (
-	text: string,
-	elementContainer: HTMLElement,
-	chunkDelayMs = 60,
-) => {
-	const cleanedText = text.replace(/<think>[\s\S]*?<\/think>/gi, "");
-
-	if (!document.getElementById("stream-style")) {
-		const style = document.createElement("style");
-		style.id = "stream-style";
-		style.innerHTML = `
-      .stream-chunk { opacity: 0; transform: translateY(2px); transition: opacity 120ms ease-out, transform 120ms ease-out; }
-      .stream-chunk.visible { opacity: 1; transform: translateY(0); }
-    `;
-		document.head.appendChild(style);
-	}
-
-	const streamContainer = document.createElement("div");
-	streamContainer.className =
-		"text-foreground  break-words overflow-wrap-anywhere markdown-content text-[0.9375rem]";
-	elementContainer.appendChild(streamContainer);
-
-	const paragraphs = cleanedText
-		.split(/\n{2,}/)
-		.map((s) => s.trim())
-		.filter((s) => s.length > 0);
-
-	let chunks: string[] = [];
-	if (paragraphs.length > 1) {
-		chunks = paragraphs;
-	} else {
-		const sentences = cleanedText.match(/[^\r\n.!?]+[.!?]*(?:\s+|$)/g) || [
-			cleanedText,
-		];
-		chunks = sentences.map((s) => s.trim()).filter((s) => s.length > 0);
-	}
-
-	for (const chunk of chunks) {
-		const chunkHTML = parseMarkdown(chunk);
-		const chunkDiv = document.createElement("div");
-		chunkDiv.className = "stream-chunk";
-		chunkDiv.innerHTML = chunkHTML;
-		streamContainer.appendChild(chunkDiv);
-
-		// eslint-disable-next-line @typescript-eslint/no-unused-expressions
-		chunkDiv.offsetHeight;
-		requestAnimationFrame(() => {
-			chunkDiv.classList.add("visible");
-		});
-
-		await new Promise((resolve) => setTimeout(resolve, chunkDelayMs));
-	}
-
-	return streamContainer;
 };
 
 export default function ChatPage({ isDev = false }: ChatPageProps) {
@@ -478,6 +282,7 @@ export default function ChatPage({ isDev = false }: ChatPageProps) {
 	const [inputValue, setInputValue] = useState("");
 	const [apiEndpoint, setApiEndpoint] = useState(getStoredEndpoint());
 	const [isAwaitingResponse, setIsAwaitingResponse] = useState(false);
+	const isSendingRef = useRef(false);
 	const router = useRouter();
 	const [showDocumentManager, setShowDocumentManager] = useState(false);
 	const [isSessionLoading, setIsSessionLoading] = useState(true);
@@ -557,10 +362,11 @@ export default function ChatPage({ isDev = false }: ChatPageProps) {
 		: sessionPlaceholder;
 
 	const handleFeedback = useCallback(
-		async (userInput: any, answer: any, reason: any) => {
+		async (userInput: string, answer: string, reason: string) => {
 			try {
-				await fetch("/api/feedback", {
+				await fetch(API_ENDPOINTS.FEEDBACK, {
 					method: "POST",
+					credentials: "include",
 					headers: {
 						"Content-Type": "application/json",
 					},
@@ -579,7 +385,7 @@ export default function ChatPage({ isDev = false }: ChatPageProps) {
 	);
 
 	const addMessageToChat = useCallback(
-		(role: string, content: any, className: any, shouldStream = false) => {
+		(role: string, content: string, className: string, shouldStream = false) => {
 			const chatLog = document.getElementById("chat-log");
 			const messageElement = document.createElement("div");
 			const isUser = role === "user";
@@ -649,6 +455,239 @@ export default function ChatPage({ isDev = false }: ChatPageProps) {
 		chatLog?.scrollTo(0, chatLog.scrollHeight);
 		return messageElement.querySelector(".flex.flex-col");
 	}, []);
+
+	/**
+	 * Sends one turn. This is the single submit path: the composer and the
+	 * recommendation cards both call it directly, so a prompt card cannot
+	 * fan out into more than one request.
+	 */
+	const submitTurn = async (value: string) => {
+		if (!value.trim()) return;
+
+		let finalValue = value.trim();
+		if (activeReference) {
+			finalValue = `${activeReference}, ${finalValue}`;
+			setActiveReference(null);
+		}
+
+		// `isAwaitingResponse` only takes effect on the next render, so it cannot
+		// stop two calls made in the same tick. The ref can.
+		if (isAwaitingResponse || isSendingRef.current) return;
+		isSendingRef.current = true;
+		setIsAwaitingResponse(true);
+		let botMessage: HTMLElement | null = null;
+
+		try {
+			setShowStarter(false);
+			setIsChatboxCentered(false);
+
+			const activeSessionId = currentSessionId || getCurrentSessionId() || "";
+			if (!activeSessionId) {
+				setSessionError("We couldn't find an active chat session. Please try again.");
+				return;
+			}
+
+			if (currentSessionId !== activeSessionId) {
+				setCurrentSessionId(activeSessionId);
+			}
+			if (chatHistoryId !== activeSessionId) {
+				setChatHistoryId(activeSessionId);
+			}
+
+			addMessageToChat(
+				"user",
+				finalValue,
+				"bg-muted/50 dark:bg-muted/50 text-sm",
+			);
+
+			ensureSearchLoaderStyles();
+			const rawBotMessage = addAssistantRawHtml(getSearchLoaderHTML(), "text-sm");
+			botMessage = rawBotMessage instanceof HTMLElement ? rawBotMessage : null;
+
+
+			// 1. POST /api/chat → { chatId, sessionId }
+			const postUrl = isDev
+				? apiEndpoint || API_ENDPOINTS.CHAT
+				: API_ENDPOINTS.CHAT;
+
+			const postBody: Record<string, unknown> = {
+				messages: [{ role: "user", content: finalValue }],
+				chatHistoryId: activeSessionId,
+				// Chat.post reads mode to size the agent's iteration budget.
+				mode: thinkingMode ? "agent" : "default",
+			};
+			// SourceSerializer takes a list of document names; "ChatDKU" is
+			// the default corpus, anything alongside it searches both.
+			if (searchMode) postBody.sources = ["ChatDKU", searchMode];
+
+			const postChat = (body: Record<string, unknown>) =>
+				fetch(postUrl, {
+					method: "POST",
+					credentials: "include",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify(body),
+				});
+
+			let postResponse = await postChat(postBody);
+
+			// A session the backend does not recognise is rejected up front,
+			// so mint a fresh one and retry that turn against it.
+			if (!postResponse.ok) {
+				const newSession = await getNewSession();
+				if (newSession) {
+					setCurrentSessionId(newSession);
+					setChatHistoryId(newSession);
+					postBody.chatHistoryId = newSession;
+					postResponse = await postChat(postBody);
+				}
+			}
+
+			if (!postResponse.ok) {
+				throw new Error(`POST failed: ${postResponse.status} ${postResponse.statusText}`);
+			}
+
+			const { chatId, sessionId } = await postResponse.json();
+
+			if (!chatId) {
+				throw new Error("No chatId returned from POST /api/chat");
+			}
+
+			// 2. GET /api/chat/{chatId}?sessionId=… → SSE. Use the session the
+			// backend echoed back, which is the one the retry above may have
+			// swapped in.
+			const streamSessionId =
+				sessionId || (postBody.chatHistoryId as string) || activeSessionId;
+
+			const sseResponse = await fetch(
+				API_ENDPOINTS.CHAT_STREAM(chatId, streamSessionId),
+				{
+					credentials: "include",
+					headers: { Accept: "text/event-stream" },
+				},
+			);
+
+			if (!sseResponse.ok) {
+				throw new Error(`SSE GET failed: ${sseResponse.status}`);
+			}
+
+			if (botMessage) {
+				botMessage.remove();
+			}
+
+			const messageDiv = addMessageToChat(
+				"assistant",
+				"",
+				"text-sm",
+				true,
+			);
+
+			const streamContainer = messageDiv?.querySelector("[id^='stream-container-']") as HTMLElement;
+			if (!streamContainer) {
+				throw new Error("Failed to create stream container");
+			}
+
+			const chatLog = document.getElementById("chat-log")!;
+
+			const data = await streamSSEFromReader(
+				sseResponse,
+				streamContainer,
+				chatLog,
+			);
+
+			if (messageDiv) {
+				const feedbackDiv = document.createElement("div");
+				feedbackDiv.className = "ml-4 mb-2";
+				const feedbackContent = `
+                    <div class="flex items-center gap-2 text-left">
+                      <span class="text-sm text-muted-foreground">Was this response helpful?</span>
+                      <button class="feedback-yes px-2 py-1 text-sm rounded-md bg-secondary/50 hover:bg-secondary">Yes</button>
+                      <button class="feedback-no px-2 py-1 text-sm rounded-md bg-secondary/50 transition-all duration-300 hover:bg-red-600 hover:text-white">No</button>
+                    </div>
+                  `;
+				feedbackDiv.innerHTML = feedbackContent;
+
+				const yesButton = feedbackDiv.querySelector(".feedback-yes");
+				const noButton = feedbackDiv.querySelector(".feedback-no");
+
+				yesButton?.addEventListener("click", () => {
+					handleFeedback(value, data, "helpful");
+					feedbackDiv.innerHTML =
+						'<span class="text-sm text-muted-foreground">Thanks for your feedback!</span>';
+				});
+
+				noButton?.addEventListener("click", () => {
+					feedbackDiv.innerHTML = `
+                      <div class="fixed inset-0 bg-background/80 backdrop-blur-sm z-50">
+                        <div class="fixed inset-0 flex items-center justify-center">
+                          <div class="dialog bg-background border shadow-lg rounded-lg w-[90%] max-w-md p-6">
+                            <h3 class="text-lg font-semibold mb-4">Sorry to hear that. Can you tell us why?</h3>
+                            <div class="feedback-options space-y-2" id="reason-options">
+                              <button class="reason-btn w-full text-left px-3 py-2 rounded-md border hover:bg-accent text-foreground" data-reason="not_correct">Not Correct</button>
+                              <button class="reason-btn w-full text-left px-3 py-2 rounded-md border hover:bg-accent text-foreground" data-reason="not_clear">Not Clear</button>
+                              <button class="reason-btn w-full text-left px-3 py-2 rounded-md border hover:bg-accent text-foreground" data-reason="not_relevant">Not Relevant</button>
+                              <button class="reason-btn w-full text-left px-3 py-2 rounded-md border hover:bg-accent text-foreground" data-reason="other">Other</button>
+                            </div>
+                            <textarea id="custom-reason" class="w-full mt-4 p-2 rounded-md border bg-background text-foreground hidden" rows="5" placeholder="Please describe the issue"></textarea>
+                            <div class="flex justify-end mt-6 space-x-2">
+                              <button id="submit-feedback" class="btn px-4 py-2 text-sm rounded-md bg-primary text-primary-foreground hover:bg-primary/90">Submit</button>
+                              <button id="cancel-feedback" class="btn px-4 py-2 text-sm rounded-md bg-secondary text-secondary-foreground hover:bg-destructive hover:text-destructive-foreground">Cancel</button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    `;
+
+					const optionButtons = feedbackDiv.querySelectorAll(".reason-btn");
+					const customReason = feedbackDiv.querySelector("#custom-reason") as HTMLTextAreaElement;
+					const submitBtn = feedbackDiv.querySelector("#submit-feedback");
+					const cancelBtn = feedbackDiv.querySelector("#cancel-feedback");
+
+					let selectedReason: string | null = null;
+
+					optionButtons.forEach((btn) => {
+						btn.addEventListener("click", () => {
+							selectedReason = (btn as HTMLElement).dataset.reason || null;
+							optionButtons.forEach((b) => b.classList.remove("bg-secondary", "text-white"));
+							btn.classList.add("bg-secondary", "text-black");
+							if (selectedReason === "other") {
+								customReason.classList.remove("hidden");
+							} else {
+								customReason.classList.add("hidden");
+							}
+						});
+					});
+
+					submitBtn?.addEventListener("click", () => {
+						if (!selectedReason) return;
+						const reasonToSend = selectedReason === "other" ? customReason.value.trim() : selectedReason;
+						if (selectedReason === "other" && !reasonToSend) {
+							customReason.classList.add("border-destructive");
+							customReason.placeholder = "Please write something!";
+							return;
+						}
+						handleFeedback(value, data, reasonToSend);
+						feedbackDiv.innerHTML = `<span class=\"text-sm text-muted-foreground\">Thanks for your feedback!</span>`;
+					});
+
+					cancelBtn?.addEventListener("click", () => {
+						feedbackDiv.innerHTML = `<span class=\"text-sm text-muted-foreground\">Feedback canceled.</span>`;
+					});
+				});
+				messageDiv.appendChild(feedbackDiv);
+			}
+		} catch (error) {
+			console.error("Chat error:", error);
+			if (botMessage) botMessage.remove();
+			addMessageToChat(
+				"assistant",
+				`Error: ${error instanceof Error ? error.message : "An unknown error occurred"}`,
+				"bg-destructive/10 dark:bg-destructive/20",
+			);
+		} finally {
+			isSendingRef.current = false;
+			setIsAwaitingResponse(false);
+		}
+	};
 
 	return (
 		<>
@@ -804,246 +843,13 @@ export default function ChatPage({ isDev = false }: ChatPageProps) {
 							onEndpointChange={setApiEndpoint}
 							activeReference={activeReference}
 							onClearReference={() => setActiveReference(null)}
-							onSubmit={async (value) => {
-								if (!value.trim()) return;
-
-								let finalValue = value.trim();
-								if (activeReference) {
-									finalValue = `${activeReference}, ${finalValue}`;
-									setActiveReference(null);
-								}
-
-								if (isAwaitingResponse) return;
-								setIsAwaitingResponse(true);
-								let botMessage: HTMLElement | null = null;
-
-								try {
-									setShowStarter(false);
-									setIsChatboxCentered(false);
-
-									const activeSessionId = currentSessionId || getCurrentSessionId() || "";
-									if (!activeSessionId) {
-										setSessionError("We couldn't find an active chat session. Please try again.");
-										return;
-									}
-
-									if (currentSessionId !== activeSessionId) {
-										setCurrentSessionId(activeSessionId);
-									}
-									if (chatHistoryId !== activeSessionId) {
-										setChatHistoryId(activeSessionId);
-									}
-
-									addMessageToChat(
-										"user",
-										finalValue,
-										"bg-muted/50 dark:bg-muted/50 text-sm",
-									);
-
-									ensureSearchLoaderStyles();
-									const rawBotMessage = addAssistantRawHtml(getSearchLoaderHTML(), "text-sm");
-									botMessage = rawBotMessage instanceof HTMLElement ? rawBotMessage : null;
-
-
-									// 1. POST /api/chat → chatId
-									const postUrl = isDev
-										? apiEndpoint || "/api/chat"
-										: "/api/chat";
-
-									const postBody: Record<string, unknown> = {
-										messages: [{ role: "user", content: finalValue }],
-										chatHistoryId: activeSessionId,
-									};
-									if (thinkingMode) postBody.mode = "agent";
-									if (searchMode) postBody.searchMode = searchMode;
-
-									console.log("Step 1: POST", postUrl, postBody);
-
-									let postResponse = await fetch(postUrl, {
-										method: "POST",
-										headers: { "Content-Type": "application/json" },
-										body: JSON.stringify(postBody),
-									});
-
-									if (!postResponse.ok) {
-										const newSession = await getNewSession();
-										if (newSession) {
-											setCurrentSessionId(newSession);
-											setChatHistoryId(newSession);
-											postBody.chatHistoryId = newSession;
-											postResponse = await fetch(postUrl, {
-												method: "POST",
-												headers: { "Content-Type": "application/json" },
-												body: JSON.stringify(postBody),
-											});
-										}
-									}
-
-									if (!postResponse.ok) {
-										throw new Error(`POST failed: ${postResponse.status} ${postResponse.statusText}`);
-									}
-
-									const { chatId } = await postResponse.json();
-									console.log("Got chatId:", chatId);
-
-									if (!chatId) {
-										throw new Error("No chatId returned from POST /api/chat");
-									}
-
-									// 2. GET /api/chat/{chatId}?sessionId=xxx → SSE
-									const sseUrl = `/api/chat/${chatId}?sessionId=${encodeURIComponent(activeSessionId)}`;
-									console.log("Step 2: GET (SSE)", sseUrl);
-
-									const sseResponse = await fetch(sseUrl, {
-										headers: { "Accept": "text/event-stream" },
-									});
-
-									if (!sseResponse.ok) {
-										throw new Error(`SSE GET failed: ${sseResponse.status}`);
-									}
-
-									if (botMessage) {
-										botMessage.remove();
-									}
-
-									const messageDiv = addMessageToChat(
-										"assistant",
-										"",
-										"text-sm",
-										true,
-									);
-
-									const streamContainer = messageDiv?.querySelector("[id^='stream-container-']") as HTMLElement;
-									if (!streamContainer) {
-										throw new Error("Failed to create stream container");
-									}
-
-									const chatLog = document.getElementById("chat-log")!;
-
-									const data = await streamSSEFromReader(
-										sseResponse,
-										streamContainer,
-										chatLog,
-									);
-
-									if (messageDiv) {
-										const feedbackDiv = document.createElement("div");
-										feedbackDiv.className = "ml-4 mb-2";
-										const feedbackContent = `
-                    <div class="flex items-center gap-2 text-left">
-                      <span class="text-sm text-muted-foreground">Was this response helpful?</span>
-                      <button class="feedback-yes px-2 py-1 text-sm rounded-md bg-secondary/50 hover:bg-secondary">Yes</button>
-                      <button class="feedback-no px-2 py-1 text-sm rounded-md bg-secondary/50 transition-all duration-300 hover:bg-red-600 hover:text-white">No</button>
-                    </div>
-                  `;
-										feedbackDiv.innerHTML = feedbackContent;
-
-										const yesButton = feedbackDiv.querySelector(".feedback-yes");
-										const noButton = feedbackDiv.querySelector(".feedback-no");
-
-										yesButton?.addEventListener("click", () => {
-											handleFeedback(value, data, "helpful");
-											feedbackDiv.innerHTML =
-												'<span class="text-sm text-muted-foreground">Thanks for your feedback!</span>';
-										});
-
-										noButton?.addEventListener("click", () => {
-											feedbackDiv.innerHTML = `
-                      <div class="fixed inset-0 bg-background/80 backdrop-blur-sm z-50">
-                        <div class="fixed inset-0 flex items-center justify-center">
-                          <div class="dialog bg-background border shadow-lg rounded-lg w-[90%] max-w-md p-6">
-                            <h3 class="text-lg font-semibold mb-4">Sorry to hear that. Can you tell us why?</h3>
-                            <div class="feedback-options space-y-2" id="reason-options">
-                              <button class="reason-btn w-full text-left px-3 py-2 rounded-md border hover:bg-accent text-foreground" data-reason="not_correct">Not Correct</button>
-                              <button class="reason-btn w-full text-left px-3 py-2 rounded-md border hover:bg-accent text-foreground" data-reason="not_clear">Not Clear</button>
-                              <button class="reason-btn w-full text-left px-3 py-2 rounded-md border hover:bg-accent text-foreground" data-reason="not_relevant">Not Relevant</button>
-                              <button class="reason-btn w-full text-left px-3 py-2 rounded-md border hover:bg-accent text-foreground" data-reason="other">Other</button>
-                            </div>
-                            <textarea id="custom-reason" class="w-full mt-4 p-2 rounded-md border bg-background text-foreground hidden" rows="5" placeholder="Please describe the issue"></textarea>
-                            <div class="flex justify-end mt-6 space-x-2">
-                              <button id="submit-feedback" class="btn px-4 py-2 text-sm rounded-md bg-primary text-primary-foreground hover:bg-primary/90">Submit</button>
-                              <button id="cancel-feedback" class="btn px-4 py-2 text-sm rounded-md bg-secondary text-secondary-foreground hover:bg-destructive hover:text-destructive-foreground">Cancel</button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    `;
-
-											const optionButtons = feedbackDiv.querySelectorAll(".reason-btn");
-											const customReason = feedbackDiv.querySelector("#custom-reason") as HTMLTextAreaElement;
-											const submitBtn = feedbackDiv.querySelector("#submit-feedback");
-											const cancelBtn = feedbackDiv.querySelector("#cancel-feedback");
-
-											let selectedReason: string | null = null;
-
-											optionButtons.forEach((btn) => {
-												btn.addEventListener("click", () => {
-													selectedReason = (btn as HTMLElement).dataset.reason || null;
-													optionButtons.forEach((b) => b.classList.remove("bg-secondary", "text-white"));
-													btn.classList.add("bg-secondary", "text-black");
-													if (selectedReason === "other") {
-														customReason.classList.remove("hidden");
-													} else {
-														customReason.classList.add("hidden");
-													}
-												});
-											});
-
-											submitBtn?.addEventListener("click", () => {
-												if (!selectedReason) return;
-												let reasonToSend = selectedReason === "other" ? customReason.value.trim() : selectedReason;
-												if (selectedReason === "other" && !reasonToSend) {
-													customReason.classList.add("border-destructive");
-													customReason.placeholder = "Please write something!";
-													return;
-												}
-												handleFeedback(value, data, reasonToSend);
-												feedbackDiv.innerHTML = `<span class=\"text-sm text-muted-foreground\">Thanks for your feedback!</span>`;
-											});
-
-											cancelBtn?.addEventListener("click", () => {
-												feedbackDiv.innerHTML = `<span class=\"text-sm text-muted-foreground\">Feedback canceled.</span>`;
-											});
-										});
-										messageDiv.appendChild(feedbackDiv);
-									}
-								} catch (error) {
-									console.error("Chat error:", error);
-									if (botMessage) botMessage.remove();
-									addMessageToChat(
-										"assistant",
-										`Error: ${error instanceof Error ? error.message : "An unknown error occurred"}`,
-										"bg-destructive/10 dark:bg-destructive/20",
-									);
-								} finally {
-									setIsAwaitingResponse(false);
-								}
-							}}
+							onSubmit={submitTurn}
 						/>
 						{isChatboxCentered && (
 							<div
 								className={`transition-all duration-300 ${inputValue ? "opacity-0 max-h-0 overflow-hidden" : "opacity-100 max-h-96"}`}
 							>
-								<PromptRecs
-									onPromptSelect={(prompt) => {
-										const aiInput = document.getElementById(
-											"ai-input",
-										) as HTMLTextAreaElement;
-										if (aiInput) {
-											aiInput.value = prompt;
-											const inputEvent = new Event("input", { bubbles: true });
-											aiInput.dispatchEvent(inputEvent);
-											const enterEvent = new KeyboardEvent("keydown", {
-												key: "Enter",
-												code: "Enter",
-												bubbles: true,
-												cancelable: true,
-												shiftKey: false,
-											});
-											aiInput.dispatchEvent(enterEvent);
-										}
-									}}
-								/>
+								<PromptRecs onPromptSelect={submitTurn} />
 							</div>
 						)}
 					</div>

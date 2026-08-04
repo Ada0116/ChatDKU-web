@@ -1,29 +1,18 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { backendFetch, backendUnreachable, relayResponse, isMockApi } from '@/lib/server/backend';
 
+// GET /user/ -> Django core.views.HealthView -> { netid, username, role }
+// The values come off the Shibboleth-populated Django session, so this doubles
+// as the "am I logged in?" probe used by the welcome banner.
 export async function GET(request: NextRequest) {
-  // Mock user data for development
-  const mockUser = {
-    eppn: 'dev-user@dukekunshan.edu.cn',
-    displayName: 'Development User',
-    username: 'dev-user',
-    name: 'Development User',
-    profile: 'Development user profile for testing',
-  };
+  if (isMockApi()) {
+    return Response.json({ netid: 'dev-user', username: 'Development User', role: 'student' });
+  }
 
-  return NextResponse.json(mockUser);
-}
-
-export async function POST(request: NextRequest) {
-  // Handle profile updates
-  const body = await request.json();
-  
-  const mockUser = {
-    eppn: 'dev-user@dukekunshan.edu.cn',
-    displayName: 'Development User',
-    username: 'dev-user',
-    name: 'Development User',
-    profile: body.profile || 'Development user profile for testing',
-  };
-
-  return NextResponse.json(mockUser);
+  try {
+    const response = await backendFetch(request, '/user/');
+    return relayResponse(response);
+  } catch (error) {
+    return backendUnreachable('user', error);
+  }
 }

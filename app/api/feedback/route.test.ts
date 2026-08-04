@@ -1,236 +1,117 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { NextRequest } from 'next/server';
 import { POST } from './route';
-import { NextResponse } from 'next/server';
 
-// Mock fetch for database calls
-global.fetch = jest.fn();
+// Proxy onto Django's FeedbackView, which stores
+// { userInput, botAnswer, feedbackReason, chatHistoryId }.
 
-describe('/api/feedback/route', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
+const BACKEND = 'http://127.0.0.1:8009';
+const mockFetch = vi.fn();
+
+const valid = {
+  userInput: 'What are the dining hours?',
+  botAnswer: 'Marketplace serves dinner until 8pm.',
+  feedbackReason: 'helpful',
+  chatHistoryId: '08d8d518-bc9a-4f25-8e1a-8b6f3264f59b',
+};
+
+const post = (body: unknown, headers: Record<string, string> = {}) =>
+  POST(
+    new NextRequest('http://localhost:3000/api/feedback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headers },
+      body: typeof body === 'string' ? body : JSON.stringify(body),
+    }),
+  );
+
+beforeEach(() => {
+  vi.stubGlobal('fetch', mockFetch);
+  mockFetch.mockReset();
+  mockFetch.mockResolvedValue(
+    new Response(JSON.stringify({ message: 'Feedback saved successfully' }), {
+      status: 201,
+      headers: { 'Content-Type': 'application/json' },
+    }),
+  );
+});
+
+describe('POST /api/feedback', () => {
+  it('forwards valid feedback to the backend and relays 201', async () => {
+    const response = await post(valid);
+
+    expect(response.status).toBe(201);
+    await expect(response.json()).resolves.toEqual({ message: 'Feedback saved successfully' });
+
+    const [url, init] = mockFetch.mock.calls[0];
+    expect(url).toBe(`${BACKEND}/api/feedback`);
+    expect(JSON.parse(init.body)).toEqual(valid);
   });
 
-  it('processes feedback submission successfully', async () => {
-    const mockFeedbackData = {
-      userInput: 'What is the deadline?',
-      botAnswer: 'The deadline is Friday at 5 PM.',
-      feedbackReason: 'helpful',
-      chatHistoryId: 'session-123',
-    };
-
-    // Mock successful database insertion
-    (fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ success: true }),
-    });
-
-    const mockRequest = {
-      json: () => Promise.resolve(mockFeedbackData),
-    } as any;
-
-    const response = await POST(mockRequest);
-
-    expect(response).toBeInstanceOf(NextResponse);
-    expect(response.status).toBe(200);
-  });
-
-  it('handles negative feedback with custom reason', async () => {
-    const mockFeedbackData = {
-      userInput: 'How do I register?',
-      botAnswer: 'You can register online.',
-      feedbackReason: 'The information was not clear enough.',
-      chatHistoryId: 'session-456',
-    };
-
-    (fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ success: true }),
-    });
-
-    const mockRequest = {
-      json: () => Promise.resolve(mockFeedbackData),
-    } as any;
-
-    const response = await POST(mockRequest);
-
-    expect(response).toBeInstanceOf(NextResponse);
-    expect(response.status).toBe(200);
-  });
-
-  it('validates required feedback fields', async () => {
-    const incompleteData = {
-      userInput: 'Test question',
-      // Missing botAnswer, feedbackReason, chatHistoryId
-    };
-
-    const mockRequest = {
-      json: () => Promise.resolve(incompleteData),
-    } as any;
-
-    const response = await POST(mockRequest);
-    const responseText = await response.text();
+  it.each([
+    ['userInput', { ...valid, userInput: '' }],
+    ['botAnswer', { ...valid, botAnswer: '' }],
+    ['feedbackReason', { ...valid, feedbackReason: '' }],
+    ['chatHistoryId', { ...valid, chatHistoryId: undefined }],
+  ])('rejects feedback missing %s', async (_field, body) => {
+    const response = await post(body);
 
     expect(response.status).toBe(400);
-    expect(responseText).toContain('Missing required fields');
+    await expect(response.json()).resolves.toEqual({ error: 'Missing required fields' });
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it('handles database errors gracefully', async () => {
-    const mockFeedbackData = {
-      userInput: 'Test question',
-      botAnswer: 'Test answer',
-      feedbackReason: 'helpful',
-      chatHistoryId: 'session-789',
+  it('rejects a blank or non-string session id', async () => {
+    const blank = await post({ ...valid, chatHistoryId: '   ' });
+    expect(blank.status).toBe(400);
+    await expect(blank.json()).resolves.toEqual({ error: 'Invalid chat history ID' });
+
+    const numeric = await post({ ...valid, chatHistoryId: 42 });
+    expect(numeric.status).toBe(400);
+
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('rejects a malformed body', async () => {
+    const response = await post('not json');
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: 'Invalid request body' });
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('preserves long answers and special characters', async () => {
+    const body = {
+      ...valid,
+      botAnswer: 'x'.repeat(5000),
+      feedbackReason: 'Wrong — the 食堂 closes at 20:00 <script>alert(1)</script>',
     };
 
-    (fetch as jest.Mock).mockRejectedValue(new Error('Database connection failed'));
+    await post(body);
 
-    const mockRequest = {
-      json: () => Promise.resolve(mockFeedbackData),
-    } as any;
+    expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual(body);
+  });
 
-    const response = await POST(mockRequest);
-    const responseText = await response.text();
+  it('forwards auth headers', async () => {
+    await post(valid, { UID: 'ab123', Cookie: 'sessionid=xyz' });
+
+    const headers = mockFetch.mock.calls[0][1].headers as Headers;
+    expect(headers.get('uid')).toBe('ab123');
+    expect(headers.get('cookie')).toBe('sessionid=xyz');
+  });
+
+  it('relays a backend failure instead of reporting success', async () => {
+    mockFetch.mockResolvedValue(new Response('{"message":"boom"}', { status: 500 }));
+
+    const response = await post(valid);
 
     expect(response.status).toBe(500);
-    expect(responseText).toContain('Database connection failed');
   });
 
-  it('handles malformed request body', async () => {
-    const mockRequest = {
-      json: () => Promise.reject(new Error('Invalid JSON')),
-    } as any;
+  it('reports an unreachable backend as 502', async () => {
+    mockFetch.mockRejectedValue(new Error('ECONNREFUSED'));
 
-    const response = await POST(mockRequest);
-    const responseText = await response.text();
+    const response = await post(valid);
 
-    expect(response.status).toBe(400);
-    expect(responseText).toContain('Invalid request body');
-  });
-
-  it('sanitizes input data to prevent injection', async () => {
-    const maliciousData = {
-      userInput: '<script>alert("xss")</script>',
-      botAnswer: 'Normal answer',
-      feedbackReason: 'helpful',
-      chatHistoryId: 'session-123',
-    };
-
-    (fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ success: true }),
-    });
-
-    const mockRequest = {
-      json: () => Promise.resolve(maliciousData),
-    } as any;
-
-    const response = await POST(mockRequest);
-
-    expect(response).toBeInstanceOf(NextResponse);
-    // The actual sanitization would happen in the real implementation
-  });
-
-  it('handles different feedback reason types', async () => {
-    const feedbackTypes = [
-      'helpful',
-      'not_correct',
-      'not_clear',
-      'not_relevant',
-      'other',
-      'Custom feedback reason here',
-    ];
-
-    for (const reason of feedbackTypes) {
-      const mockFeedbackData = {
-        userInput: 'Test question',
-        botAnswer: 'Test answer',
-        feedbackReason: reason,
-        chatHistoryId: 'session-123',
-      };
-
-      (fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ success: true }),
-      });
-
-      const mockRequest = {
-        json: () => Promise.resolve(mockFeedbackData),
-      } as any;
-
-      const response = await POST(mockRequest);
-
-      expect(response).toBeInstanceOf(NextResponse);
-      expect(response.status).toBe(200);
-    }
-  });
-
-  it('validates chat history ID format', async () => {
-    const invalidData = {
-      userInput: 'Test question',
-      botAnswer: 'Test answer',
-      feedbackReason: 'helpful',
-      chatHistoryId: '', // Empty session ID
-    };
-
-    const mockRequest = {
-      json: () => Promise.resolve(invalidData),
-    } as any;
-
-    const response = await POST(mockRequest);
-    const responseText = await response.text();
-
-    expect(response.status).toBe(400);
-    expect(responseText).toContain('Invalid chat history ID');
-  });
-
-  it('handles long content gracefully', async () => {
-    const longContent = 'A'.repeat(10000); // Very long string
-    const mockFeedbackData = {
-      userInput: longContent,
-      botAnswer: longContent,
-      feedbackReason: 'helpful',
-      chatHistoryId: 'session-123',
-    };
-
-    (fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ success: true }),
-    });
-
-    const mockRequest = {
-      json: () => Promise.resolve(mockFeedbackData),
-    } as any;
-
-    const response = await POST(mockRequest);
-
-    expect(response).toBeInstanceOf(NextResponse);
-    expect(response.status).toBe(200);
-  });
-
-  it('logs feedback for analytics', async () => {
-    const mockFeedbackData = {
-      userInput: 'Test question',
-      botAnswer: 'Test answer',
-      feedbackReason: 'helpful',
-      chatHistoryId: 'session-123',
-    };
-
-    (fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ success: true }),
-    });
-
-    // Mock console.log to verify logging
-    const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
-
-    const mockRequest = {
-      json: () => Promise.resolve(mockFeedbackData),
-    } as any;
-
-    await POST(mockRequest);
-
-    // Basic service logging exists, but no specific analytics logging
-    expect(consoleSpy).toHaveBeenCalledWith('Proxying feedback to backend service');
-
-    consoleSpy.mockRestore();
+    expect(response.status).toBe(502);
   });
 });
