@@ -4,8 +4,8 @@ import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 
 interface PromptRecsProps {
+	/** Sends the prompt as a chat turn. See ChatPage's `submitTurn`. */
 	onPromptSelect: (prompt: string) => void;
-	onSubmit?: () => void; // Add an optional onSubmit prop
 }
 
 const allPrompts = [
@@ -163,7 +163,7 @@ const allPrompts = [
 	},
 ];
 
-export function PromptRecs({ onPromptSelect, onSubmit }: PromptRecsProps) {
+export function PromptRecs({ onPromptSelect }: PromptRecsProps) {
 	// Start with empty array to avoid hydration mismatch
 	const [selectedPrompts, setSelectedPrompts] = useState<typeof allPrompts>([]);
 
@@ -173,51 +173,6 @@ export function PromptRecs({ onPromptSelect, onSubmit }: PromptRecsProps) {
 		setSelectedPrompts(shuffled.slice(0, 3));
 	}, []);
 
-	const handlePromptClick = (promptText: string) => {
-		// First set the prompt text
-		onPromptSelect(promptText);
-
-		// Then immediately try to submit the form directly
-		setTimeout(() => {
-			// Find input fields
-			const inputs = document.querySelectorAll('input[type="text"], textarea');
-
-			// Try to simulate Enter keypress on the input field
-			if (inputs.length > 0) {
-				const lastInput = inputs[inputs.length - 1] as HTMLElement;
-				lastInput.focus();
-
-				// Create and dispatch an Enter key event
-				const enterEvent = new KeyboardEvent("keydown", {
-					bubbles: true,
-					cancelable: true,
-					key: "Enter",
-					code: "Enter",
-					keyCode: 13,
-					which: 13,
-				});
-
-				lastInput.dispatchEvent(enterEvent);
-				console.log("Enter key event dispatched on input");
-			}
-
-			// Direct approach - event on send button
-			const sendButton = document.querySelector(
-				'button[aria-label="Send message"], button:has(svg[data-icon="paper-plane"]), button:has(svg[data-testid="send-icon"])'
-			);
-			if (sendButton instanceof HTMLElement) {
-				sendButton.click();
-				console.log("Send button clicked");
-			}
-
-			// If onSubmit was provided, call it as well
-			if (onSubmit) {
-				onSubmit();
-				console.log("onSubmit called");
-			}
-		}, 10);
-	};
-
 	return (
 		<div className="flex flex-col sm:flex-row gap-2 pt-2 justify-center w-full mx-auto">
 			{selectedPrompts.map((prompt, index) => (
@@ -225,7 +180,7 @@ export function PromptRecs({ onPromptSelect, onSubmit }: PromptRecsProps) {
 					key={`${prompt.text}-${index}`}
 					variant="outline"
 					className="flex items-center shadow-none gap-2 px-4 py-2 text-xs rounded-3xl transition-colors w-full md:max-w-[280px] sm:max-w-[230px] h-auto whitespace-normal"
-					onClick={() => handlePromptClick(prompt.text)}
+					onClick={() => onPromptSelect(prompt.text)}
 				>
 					<span className="text-lg flex-shrink-0">{prompt.icon}</span>
 					<span className="text-left break-words">{prompt.text}</span>

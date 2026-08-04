@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, SetStateAction } from "react";
+import { useState, useCallback, useEffect, useRef, SetStateAction } from "react";
 
 import { useRouter } from "next/navigation";
 import Cookies from "js-cookie";
@@ -282,6 +282,7 @@ export default function ChatPage({ isDev = false }: ChatPageProps) {
 	const [inputValue, setInputValue] = useState("");
 	const [apiEndpoint, setApiEndpoint] = useState(getStoredEndpoint());
 	const [isAwaitingResponse, setIsAwaitingResponse] = useState(false);
+	const isSendingRef = useRef(false);
 	const router = useRouter();
 	const [showDocumentManager, setShowDocumentManager] = useState(false);
 	const [isSessionLoading, setIsSessionLoading] = useState(true);
@@ -455,6 +456,239 @@ export default function ChatPage({ isDev = false }: ChatPageProps) {
 		return messageElement.querySelector(".flex.flex-col");
 	}, []);
 
+	/**
+	 * Sends one turn. This is the single submit path: the composer and the
+	 * recommendation cards both call it directly, so a prompt card cannot
+	 * fan out into more than one request.
+	 */
+	const submitTurn = async (value: string) => {
+		if (!value.trim()) return;
+
+		let finalValue = value.trim();
+		if (activeReference) {
+			finalValue = `${activeReference}, ${finalValue}`;
+			setActiveReference(null);
+		}
+
+		// `isAwaitingResponse` only takes effect on the next render, so it cannot
+		// stop two calls made in the same tick. The ref can.
+		if (isAwaitingResponse || isSendingRef.current) return;
+		isSendingRef.current = true;
+		setIsAwaitingResponse(true);
+		let botMessage: HTMLElement | null = null;
+
+		try {
+			setShowStarter(false);
+			setIsChatboxCentered(false);
+
+			const activeSessionId = currentSessionId || getCurrentSessionId() || "";
+			if (!activeSessionId) {
+				setSessionError("We couldn't find an active chat session. Please try again.");
+				return;
+			}
+
+			if (currentSessionId !== activeSessionId) {
+				setCurrentSessionId(activeSessionId);
+			}
+			if (chatHistoryId !== activeSessionId) {
+				setChatHistoryId(activeSessionId);
+			}
+
+			addMessageToChat(
+				"user",
+				finalValue,
+				"bg-muted/50 dark:bg-muted/50 text-sm",
+			);
+
+			ensureSearchLoaderStyles();
+			const rawBotMessage = addAssistantRawHtml(getSearchLoaderHTML(), "text-sm");
+			botMessage = rawBotMessage instanceof HTMLElement ? rawBotMessage : null;
+
+
+			// 1. POST /api/chat → { chatId, sessionId }
+			const postUrl = isDev
+				? apiEndpoint || API_ENDPOINTS.CHAT
+				: API_ENDPOINTS.CHAT;
+
+			const postBody: Record<string, unknown> = {
+				messages: [{ role: "user", content: finalValue }],
+				chatHistoryId: activeSessionId,
+				// Chat.post reads mode to size the agent's iteration budget.
+				mode: thinkingMode ? "agent" : "default",
+			};
+			// SourceSerializer takes a list of document names; "ChatDKU" is
+			// the default corpus, anything alongside it searches both.
+			if (searchMode) postBody.sources = ["ChatDKU", searchMode];
+
+			const postChat = (body: Record<string, unknown>) =>
+				fetch(postUrl, {
+					method: "POST",
+					credentials: "include",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify(body),
+				});
+
+			let postResponse = await postChat(postBody);
+
+			// A session the backend does not recognise is rejected up front,
+			// so mint a fresh one and retry that turn against it.
+			if (!postResponse.ok) {
+				const newSession = await getNewSession();
+				if (newSession) {
+					setCurrentSessionId(newSession);
+					setChatHistoryId(newSession);
+					postBody.chatHistoryId = newSession;
+					postResponse = await postChat(postBody);
+				}
+			}
+
+			if (!postResponse.ok) {
+				throw new Error(`POST failed: ${postResponse.status} ${postResponse.statusText}`);
+			}
+
+			const { chatId, sessionId } = await postResponse.json();
+
+			if (!chatId) {
+				throw new Error("No chatId returned from POST /api/chat");
+			}
+
+			// 2. GET /api/chat/{chatId}?sessionId=… → SSE. Use the session the
+			// backend echoed back, which is the one the retry above may have
+			// swapped in.
+			const streamSessionId =
+				sessionId || (postBody.chatHistoryId as string) || activeSessionId;
+
+			const sseResponse = await fetch(
+				API_ENDPOINTS.CHAT_STREAM(chatId, streamSessionId),
+				{
+					credentials: "include",
+					headers: { Accept: "text/event-stream" },
+				},
+			);
+
+			if (!sseResponse.ok) {
+				throw new Error(`SSE GET failed: ${sseResponse.status}`);
+			}
+
+			if (botMessage) {
+				botMessage.remove();
+			}
+
+			const messageDiv = addMessageToChat(
+				"assistant",
+				"",
+				"text-sm",
+				true,
+			);
+
+			const streamContainer = messageDiv?.querySelector("[id^='stream-container-']") as HTMLElement;
+			if (!streamContainer) {
+				throw new Error("Failed to create stream container");
+			}
+
+			const chatLog = document.getElementById("chat-log")!;
+
+			const data = await streamSSEFromReader(
+				sseResponse,
+				streamContainer,
+				chatLog,
+			);
+
+			if (messageDiv) {
+				const feedbackDiv = document.createElement("div");
+				feedbackDiv.className = "ml-4 mb-2";
+				const feedbackContent = `
+                    <div class="flex items-center gap-2 text-left">
+                      <span class="text-sm text-muted-foreground">Was this response helpful?</span>
+                      <button class="feedback-yes px-2 py-1 text-sm rounded-md bg-secondary/50 hover:bg-secondary">Yes</button>
+                      <button class="feedback-no px-2 py-1 text-sm rounded-md bg-secondary/50 transition-all duration-300 hover:bg-red-600 hover:text-white">No</button>
+                    </div>
+                  `;
+				feedbackDiv.innerHTML = feedbackContent;
+
+				const yesButton = feedbackDiv.querySelector(".feedback-yes");
+				const noButton = feedbackDiv.querySelector(".feedback-no");
+
+				yesButton?.addEventListener("click", () => {
+					handleFeedback(value, data, "helpful");
+					feedbackDiv.innerHTML =
+						'<span class="text-sm text-muted-foreground">Thanks for your feedback!</span>';
+				});
+
+				noButton?.addEventListener("click", () => {
+					feedbackDiv.innerHTML = `
+                      <div class="fixed inset-0 bg-background/80 backdrop-blur-sm z-50">
+                        <div class="fixed inset-0 flex items-center justify-center">
+                          <div class="dialog bg-background border shadow-lg rounded-lg w-[90%] max-w-md p-6">
+                            <h3 class="text-lg font-semibold mb-4">Sorry to hear that. Can you tell us why?</h3>
+                            <div class="feedback-options space-y-2" id="reason-options">
+                              <button class="reason-btn w-full text-left px-3 py-2 rounded-md border hover:bg-accent text-foreground" data-reason="not_correct">Not Correct</button>
+                              <button class="reason-btn w-full text-left px-3 py-2 rounded-md border hover:bg-accent text-foreground" data-reason="not_clear">Not Clear</button>
+                              <button class="reason-btn w-full text-left px-3 py-2 rounded-md border hover:bg-accent text-foreground" data-reason="not_relevant">Not Relevant</button>
+                              <button class="reason-btn w-full text-left px-3 py-2 rounded-md border hover:bg-accent text-foreground" data-reason="other">Other</button>
+                            </div>
+                            <textarea id="custom-reason" class="w-full mt-4 p-2 rounded-md border bg-background text-foreground hidden" rows="5" placeholder="Please describe the issue"></textarea>
+                            <div class="flex justify-end mt-6 space-x-2">
+                              <button id="submit-feedback" class="btn px-4 py-2 text-sm rounded-md bg-primary text-primary-foreground hover:bg-primary/90">Submit</button>
+                              <button id="cancel-feedback" class="btn px-4 py-2 text-sm rounded-md bg-secondary text-secondary-foreground hover:bg-destructive hover:text-destructive-foreground">Cancel</button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    `;
+
+					const optionButtons = feedbackDiv.querySelectorAll(".reason-btn");
+					const customReason = feedbackDiv.querySelector("#custom-reason") as HTMLTextAreaElement;
+					const submitBtn = feedbackDiv.querySelector("#submit-feedback");
+					const cancelBtn = feedbackDiv.querySelector("#cancel-feedback");
+
+					let selectedReason: string | null = null;
+
+					optionButtons.forEach((btn) => {
+						btn.addEventListener("click", () => {
+							selectedReason = (btn as HTMLElement).dataset.reason || null;
+							optionButtons.forEach((b) => b.classList.remove("bg-secondary", "text-white"));
+							btn.classList.add("bg-secondary", "text-black");
+							if (selectedReason === "other") {
+								customReason.classList.remove("hidden");
+							} else {
+								customReason.classList.add("hidden");
+							}
+						});
+					});
+
+					submitBtn?.addEventListener("click", () => {
+						if (!selectedReason) return;
+						const reasonToSend = selectedReason === "other" ? customReason.value.trim() : selectedReason;
+						if (selectedReason === "other" && !reasonToSend) {
+							customReason.classList.add("border-destructive");
+							customReason.placeholder = "Please write something!";
+							return;
+						}
+						handleFeedback(value, data, reasonToSend);
+						feedbackDiv.innerHTML = `<span class=\"text-sm text-muted-foreground\">Thanks for your feedback!</span>`;
+					});
+
+					cancelBtn?.addEventListener("click", () => {
+						feedbackDiv.innerHTML = `<span class=\"text-sm text-muted-foreground\">Feedback canceled.</span>`;
+					});
+				});
+				messageDiv.appendChild(feedbackDiv);
+			}
+		} catch (error) {
+			console.error("Chat error:", error);
+			if (botMessage) botMessage.remove();
+			addMessageToChat(
+				"assistant",
+				`Error: ${error instanceof Error ? error.message : "An unknown error occurred"}`,
+				"bg-destructive/10 dark:bg-destructive/20",
+			);
+		} finally {
+			isSendingRef.current = false;
+			setIsAwaitingResponse(false);
+		}
+	};
+
 	return (
 		<>
 			<Side
@@ -609,254 +843,13 @@ export default function ChatPage({ isDev = false }: ChatPageProps) {
 							onEndpointChange={setApiEndpoint}
 							activeReference={activeReference}
 							onClearReference={() => setActiveReference(null)}
-							onSubmit={async (value) => {
-								if (!value.trim()) return;
-
-								let finalValue = value.trim();
-								if (activeReference) {
-									finalValue = `${activeReference}, ${finalValue}`;
-									setActiveReference(null);
-								}
-
-								if (isAwaitingResponse) return;
-								setIsAwaitingResponse(true);
-								let botMessage: HTMLElement | null = null;
-
-								try {
-									setShowStarter(false);
-									setIsChatboxCentered(false);
-
-									const activeSessionId = currentSessionId || getCurrentSessionId() || "";
-									if (!activeSessionId) {
-										setSessionError("We couldn't find an active chat session. Please try again.");
-										return;
-									}
-
-									if (currentSessionId !== activeSessionId) {
-										setCurrentSessionId(activeSessionId);
-									}
-									if (chatHistoryId !== activeSessionId) {
-										setChatHistoryId(activeSessionId);
-									}
-
-									addMessageToChat(
-										"user",
-										finalValue,
-										"bg-muted/50 dark:bg-muted/50 text-sm",
-									);
-
-									ensureSearchLoaderStyles();
-									const rawBotMessage = addAssistantRawHtml(getSearchLoaderHTML(), "text-sm");
-									botMessage = rawBotMessage instanceof HTMLElement ? rawBotMessage : null;
-
-
-									// 1. POST /api/chat → { chatId, sessionId }
-									const postUrl = isDev
-										? apiEndpoint || API_ENDPOINTS.CHAT
-										: API_ENDPOINTS.CHAT;
-
-									const postBody: Record<string, unknown> = {
-										messages: [{ role: "user", content: finalValue }],
-										chatHistoryId: activeSessionId,
-										// Chat.post reads mode to size the agent's iteration budget.
-										mode: thinkingMode ? "agent" : "default",
-									};
-									// SourceSerializer takes a list of document names; "ChatDKU" is
-									// the default corpus, anything alongside it searches both.
-									if (searchMode) postBody.sources = ["ChatDKU", searchMode];
-
-									const postChat = (body: Record<string, unknown>) =>
-										fetch(postUrl, {
-											method: "POST",
-											credentials: "include",
-											headers: { "Content-Type": "application/json" },
-											body: JSON.stringify(body),
-										});
-
-									let postResponse = await postChat(postBody);
-
-									// A session the backend does not recognise is rejected up front,
-									// so mint a fresh one and retry that turn against it.
-									if (!postResponse.ok) {
-										const newSession = await getNewSession();
-										if (newSession) {
-											setCurrentSessionId(newSession);
-											setChatHistoryId(newSession);
-											postBody.chatHistoryId = newSession;
-											postResponse = await postChat(postBody);
-										}
-									}
-
-									if (!postResponse.ok) {
-										throw new Error(`POST failed: ${postResponse.status} ${postResponse.statusText}`);
-									}
-
-									const { chatId, sessionId } = await postResponse.json();
-
-									if (!chatId) {
-										throw new Error("No chatId returned from POST /api/chat");
-									}
-
-									// 2. GET /api/chat/{chatId}?sessionId=… → SSE. Use the session the
-									// backend echoed back, which is the one the retry above may have
-									// swapped in.
-									const streamSessionId =
-										sessionId || (postBody.chatHistoryId as string) || activeSessionId;
-
-									const sseResponse = await fetch(
-										API_ENDPOINTS.CHAT_STREAM(chatId, streamSessionId),
-										{
-											credentials: "include",
-											headers: { Accept: "text/event-stream" },
-										},
-									);
-
-									if (!sseResponse.ok) {
-										throw new Error(`SSE GET failed: ${sseResponse.status}`);
-									}
-
-									if (botMessage) {
-										botMessage.remove();
-									}
-
-									const messageDiv = addMessageToChat(
-										"assistant",
-										"",
-										"text-sm",
-										true,
-									);
-
-									const streamContainer = messageDiv?.querySelector("[id^='stream-container-']") as HTMLElement;
-									if (!streamContainer) {
-										throw new Error("Failed to create stream container");
-									}
-
-									const chatLog = document.getElementById("chat-log")!;
-
-									const data = await streamSSEFromReader(
-										sseResponse,
-										streamContainer,
-										chatLog,
-									);
-
-									if (messageDiv) {
-										const feedbackDiv = document.createElement("div");
-										feedbackDiv.className = "ml-4 mb-2";
-										const feedbackContent = `
-                    <div class="flex items-center gap-2 text-left">
-                      <span class="text-sm text-muted-foreground">Was this response helpful?</span>
-                      <button class="feedback-yes px-2 py-1 text-sm rounded-md bg-secondary/50 hover:bg-secondary">Yes</button>
-                      <button class="feedback-no px-2 py-1 text-sm rounded-md bg-secondary/50 transition-all duration-300 hover:bg-red-600 hover:text-white">No</button>
-                    </div>
-                  `;
-										feedbackDiv.innerHTML = feedbackContent;
-
-										const yesButton = feedbackDiv.querySelector(".feedback-yes");
-										const noButton = feedbackDiv.querySelector(".feedback-no");
-
-										yesButton?.addEventListener("click", () => {
-											handleFeedback(value, data, "helpful");
-											feedbackDiv.innerHTML =
-												'<span class="text-sm text-muted-foreground">Thanks for your feedback!</span>';
-										});
-
-										noButton?.addEventListener("click", () => {
-											feedbackDiv.innerHTML = `
-                      <div class="fixed inset-0 bg-background/80 backdrop-blur-sm z-50">
-                        <div class="fixed inset-0 flex items-center justify-center">
-                          <div class="dialog bg-background border shadow-lg rounded-lg w-[90%] max-w-md p-6">
-                            <h3 class="text-lg font-semibold mb-4">Sorry to hear that. Can you tell us why?</h3>
-                            <div class="feedback-options space-y-2" id="reason-options">
-                              <button class="reason-btn w-full text-left px-3 py-2 rounded-md border hover:bg-accent text-foreground" data-reason="not_correct">Not Correct</button>
-                              <button class="reason-btn w-full text-left px-3 py-2 rounded-md border hover:bg-accent text-foreground" data-reason="not_clear">Not Clear</button>
-                              <button class="reason-btn w-full text-left px-3 py-2 rounded-md border hover:bg-accent text-foreground" data-reason="not_relevant">Not Relevant</button>
-                              <button class="reason-btn w-full text-left px-3 py-2 rounded-md border hover:bg-accent text-foreground" data-reason="other">Other</button>
-                            </div>
-                            <textarea id="custom-reason" class="w-full mt-4 p-2 rounded-md border bg-background text-foreground hidden" rows="5" placeholder="Please describe the issue"></textarea>
-                            <div class="flex justify-end mt-6 space-x-2">
-                              <button id="submit-feedback" class="btn px-4 py-2 text-sm rounded-md bg-primary text-primary-foreground hover:bg-primary/90">Submit</button>
-                              <button id="cancel-feedback" class="btn px-4 py-2 text-sm rounded-md bg-secondary text-secondary-foreground hover:bg-destructive hover:text-destructive-foreground">Cancel</button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    `;
-
-											const optionButtons = feedbackDiv.querySelectorAll(".reason-btn");
-											const customReason = feedbackDiv.querySelector("#custom-reason") as HTMLTextAreaElement;
-											const submitBtn = feedbackDiv.querySelector("#submit-feedback");
-											const cancelBtn = feedbackDiv.querySelector("#cancel-feedback");
-
-											let selectedReason: string | null = null;
-
-											optionButtons.forEach((btn) => {
-												btn.addEventListener("click", () => {
-													selectedReason = (btn as HTMLElement).dataset.reason || null;
-													optionButtons.forEach((b) => b.classList.remove("bg-secondary", "text-white"));
-													btn.classList.add("bg-secondary", "text-black");
-													if (selectedReason === "other") {
-														customReason.classList.remove("hidden");
-													} else {
-														customReason.classList.add("hidden");
-													}
-												});
-											});
-
-											submitBtn?.addEventListener("click", () => {
-												if (!selectedReason) return;
-												const reasonToSend = selectedReason === "other" ? customReason.value.trim() : selectedReason;
-												if (selectedReason === "other" && !reasonToSend) {
-													customReason.classList.add("border-destructive");
-													customReason.placeholder = "Please write something!";
-													return;
-												}
-												handleFeedback(value, data, reasonToSend);
-												feedbackDiv.innerHTML = `<span class=\"text-sm text-muted-foreground\">Thanks for your feedback!</span>`;
-											});
-
-											cancelBtn?.addEventListener("click", () => {
-												feedbackDiv.innerHTML = `<span class=\"text-sm text-muted-foreground\">Feedback canceled.</span>`;
-											});
-										});
-										messageDiv.appendChild(feedbackDiv);
-									}
-								} catch (error) {
-									console.error("Chat error:", error);
-									if (botMessage) botMessage.remove();
-									addMessageToChat(
-										"assistant",
-										`Error: ${error instanceof Error ? error.message : "An unknown error occurred"}`,
-										"bg-destructive/10 dark:bg-destructive/20",
-									);
-								} finally {
-									setIsAwaitingResponse(false);
-								}
-							}}
+							onSubmit={submitTurn}
 						/>
 						{isChatboxCentered && (
 							<div
 								className={`transition-all duration-300 ${inputValue ? "opacity-0 max-h-0 overflow-hidden" : "opacity-100 max-h-96"}`}
 							>
-								<PromptRecs
-									onPromptSelect={(prompt) => {
-										const aiInput = document.getElementById(
-											"ai-input",
-										) as HTMLTextAreaElement;
-										if (aiInput) {
-											aiInput.value = prompt;
-											const inputEvent = new Event("input", { bubbles: true });
-											aiInput.dispatchEvent(inputEvent);
-											const enterEvent = new KeyboardEvent("keydown", {
-												key: "Enter",
-												code: "Enter",
-												bubbles: true,
-												cancelable: true,
-												shiftKey: false,
-											});
-											aiInput.dispatchEvent(enterEvent);
-										}
-									}}
-								/>
+								<PromptRecs onPromptSelect={submitTurn} />
 							</div>
 						)}
 					</div>
