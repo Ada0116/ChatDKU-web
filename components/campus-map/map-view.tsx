@@ -1,6 +1,6 @@
 import type { RefObject } from "react";
 import { Button } from "@/components/ui/button";
-import type { Marker, WeeklyEvent } from "./types";
+import type { EventSubItem, Marker, WeeklyEvent } from "./types";
 import { getMarkerIconSrc } from "./marker-utils";
 
 /** Renders event detail content inside the map popup panel */
@@ -205,7 +205,7 @@ export function MapView({
               {selectedMarker.type === "event" ? (
                 <div className="p-4">
                   <EventDetail
-                    ev={(activeItem as any).rawEvent as WeeklyEvent}
+                    ev={(activeItem as EventSubItem).rawEvent}
                     lang={lang}
                   />
                 </div>
