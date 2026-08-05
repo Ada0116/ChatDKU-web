@@ -19,7 +19,7 @@ import Side from "@/components/side";
 import { DocumentManager } from "@/components/doc-manager";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import CampusMap from "@/components/CampusMap";
+import CampusMap from "@/components/campus-map";
 import AcademicCalendar from "@/components/academic-calendar";
 import { API_ENDPOINTS } from "@/lib/constants";
 import {
