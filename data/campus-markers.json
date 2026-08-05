@@ -1,0 +1,1212 @@
+{
+  "markers": [
+    {
+      "id": 1,
+      "type": "building",
+      "top": 320,
+      "left": 370,
+      "items": [
+        {
+          "name": "Academic Building",
+          "nameZh": "学术楼",
+          "description": "Abbreviation: AB",
+          "descriptionZh": "缩写：AB",
+          "hours": "Open 24 hours",
+          "hoursZh": "全天开放",
+          "location": "DKU Campus",
+          "locationZh": "DKU 校园",
+          "image": "/photos/AB.jpg"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "building",
+      "top": 340,
+      "left": 175,
+      "items": [
+        {
+          "name": "Conference Center",
+          "nameZh": "会议中心",
+          "description": "Abbreviation: CC",
+          "descriptionZh": "缩写：CC",
+          "hours": "Open 24 hours",
+          "hoursZh": "全天开放",
+          "location": "DKU Campus",
+          "locationZh": "DKU 校园",
+          "image": "/photos/CC.jpg"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "building",
+      "top": 480,
+      "left": 290,
+      "items": [
+        {
+          "name": "Innovation Building",
+          "nameZh": "创新楼",
+          "description": "Abbreviation: IB",
+          "descriptionZh": "缩写：IB",
+          "hours": "Open 24 hours",
+          "hoursZh": "全天开放",
+          "location": "DKU Campus",
+          "locationZh": "DKU 校园",
+          "image": "/photos/IB.jpg"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "building",
+      "top": 312,
+      "left": 238,
+      "items": [
+        {
+          "name": "Water Pavilion",
+          "nameZh": "湖心亭",
+          "description": "",
+          "descriptionZh": "",
+          "hours": "Open 24 hours",
+          "hoursZh": "全天开放",
+          "location": "DKU Campus",
+          "locationZh": "DKU 校园",
+          "image": "/photos/Water Pavilion.jpg"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "building",
+      "top": 390,
+      "left": 580,
+      "items": [
+        {
+          "name": "Library",
+          "nameZh": "图书馆",
+          "description": "Abbreviation: LIB",
+          "descriptionZh": "缩写：LIB",
+          "hours": "8:00 - 23:00",
+          "hoursZh": "8:00 - 23:00",
+          "location": "DKU Campus",
+          "locationZh": "DKU 校园",
+          "image": "/photos/LIB.jpg"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "building",
+      "top": 470,
+      "left": 470,
+      "items": [
+        {
+          "name": "WHU-Duke Research Institute",
+          "nameZh": "武大-杜克研究院",
+          "description": "Abbreviation: WDR",
+          "descriptionZh": "缩写：WDR",
+          "hours": "Open 24 hours",
+          "hoursZh": "全天开放",
+          "location": "DKU Campus",
+          "locationZh": "DKU 校园",
+          "image": "/photos/WDR.jpg"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "building",
+      "top": 305,
+      "left": 585,
+      "items": [
+        {
+          "name": "Community Center W",
+          "nameZh": "社区中心西楼",
+          "description": "Abbreviation: CCTW",
+          "descriptionZh": "缩写：CCTW",
+          "hours": "Open 24 hours",
+          "hoursZh": "全天开放",
+          "location": "DKU Campus",
+          "locationZh": "DKU 校园",
+          "image": "/photos/CCTW.jpg"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "building",
+      "top": 300,
+      "left": 685,
+      "items": [
+        {
+          "name": "Community Center E",
+          "nameZh": "社区中心东楼",
+          "description": "Abbreviation: CCTE",
+          "descriptionZh": "缩写：CCTE",
+          "hours": "Open 24 hours",
+          "hoursZh": "全天开放",
+          "location": "DKU Campus",
+          "locationZh": "DKU 校园",
+          "image": "/photos/CCTE.jpg"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "building",
+      "top": 295,
+      "left": 840,
+      "items": [
+        {
+          "name": "Sports Complex",
+          "nameZh": "体育馆",
+          "description": "Abbreviation: SC",
+          "descriptionZh": "缩写：SC",
+          "hours": "Weekdays: 7:00 - 21:00 Weekends: 10:00 - 15:00",
+          "hoursZh": "工作日：7:00 - 21:00 周末：10:00 - 15:00",
+          "location": "DKU Campus",
+          "locationZh": "DKU 校园",
+          "image": "/photos/SC.jpg"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "building",
+      "top": 165,
+      "left": 860,
+      "items": [
+        {
+          "name": "Soccer Field",
+          "nameZh": "足球场",
+          "description": "",
+          "descriptionZh": "",
+          "hours": "Open 24 hours",
+          "hoursZh": "全天开放",
+          "location": "DKU Campus",
+          "locationZh": "DKU 校园",
+          "image": "/photos/Soccer.jpg"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "building",
+      "top": 180,
+      "left": 661,
+      "items": [
+        {
+          "name": "Students Residence",
+          "nameZh": "学生宿舍",
+          "description": "",
+          "descriptionZh": "",
+          "hours": "Open 24 hours",
+          "hoursZh": "全天开放",
+          "location": "DKU Campus",
+          "locationZh": "DKU 校园",
+          "image": "/photos/Residence.jpg"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "building",
+      "top": 390,
+      "left": 755,
+      "items": [
+        {
+          "name": "Administrative Building",
+          "nameZh": "行政楼",
+          "description": "Abbreviation: ADB",
+          "descriptionZh": "缩写：ADB",
+          "hours": "Open 24 hours",
+          "hoursZh": "全天开放",
+          "location": "DKU Campus",
+          "locationZh": "DKU 校园",
+          "image": "/photos/ADB.jpg"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "building",
+      "top": 483,
+      "left": 755,
+      "items": [
+        {
+          "name": "Visitor Center",
+          "nameZh": "访客中心",
+          "description": "Abbreviation: VC",
+          "descriptionZh": "缩写：VC",
+          "hours": "Open 24 hours",
+          "hoursZh": "全天开放",
+          "location": "DKU Campus",
+          "locationZh": "DKU 校园",
+          "image": "/photos/VC.jpg"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "type": "building",
+      "top": 335,
+      "left": 630,
+      "items": [
+        {
+          "name": "Academic Avenue",
+          "nameZh": "学术大道",
+          "description": "",
+          "descriptionZh": "",
+          "hours": "Open 24 hours",
+          "hoursZh": "全天开放",
+          "location": "DKU Campus",
+          "locationZh": "DKU 校园",
+          "image": "/photos/Avenue.jpg"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "type": "office",
+      "top": 300,
+      "left": 685,
+      "items": [
+        {
+          "name": "Office of Career Services",
+          "nameZh": "职业发展办公室",
+          "description": "careerservices@dukekunshan.edu.cn",
+          "descriptionZh": "careerservices@dukekunshan.edu.cn",
+          "hours": "Weekdays: 9:00 - 17:30",
+          "hoursZh": "工作日：9:00 - 17:30",
+          "location": "CCTE 1019",
+          "locationZh": "社区中心东楼 1019",
+          "image": "/photos/career.png",
+          "introduction": "Providing career development services to help students achieve their professional goals",
+          "introductionZh": "提供职业发展服务，帮助学生实现职业目标"
+        },
+        {
+          "name": "Health Services",
+          "nameZh": "健康服务",
+          "description": "campushealth@dukekunshan.edu.cn",
+          "descriptionZh": "campushealth@dukekunshan.edu.cn",
+          "hours": "Weekdays: 9:00 - 12:00 & 13:00 - 17:30",
+          "hoursZh": "工作日：9:00 - 12:00 & 13:00 - 17:30",
+          "location": "CCTE 4200",
+          "locationZh": "社区中心东楼 4200",
+          "image": "/photos/Health.png",
+          "introduction": "Offering high-quality primary care and health education to the DKU community",
+          "introductionZh": "为 DKU 社区提供高质量的初级医疗和健康教育"
+        },
+        {
+          "name": "Office of Student Experience",
+          "nameZh": "学生体验办公室",
+          "description": "",
+          "descriptionZh": "",
+          "location": "CCTE 4100 suite",
+          "locationZh": "社区中心东楼 4100 套间",
+          "image": "/photos/Experience.png",
+          "introduction": "Developing students holistically through transformative co-curricular experiences",
+          "introductionZh": "通过变革性的课外体验促进学生全面发展"
+        },
+        {
+          "name": "Campus Engagement",
+          "nameZh": "校园参与",
+          "description": "dkucampusengagement@dukekunshan.edu.cn",
+          "descriptionZh": "dkucampusengagement@dukekunshan.edu.cn",
+          "location": "CCTE 2019",
+          "locationZh": "社区中心东楼 2019",
+          "image": "/photos/Engagement.png",
+          "introduction": "Creating a welcoming community to support student transition and personal growth",
+          "introductionZh": "创建热情友好的社区，支持学生过渡和个人成长"
+        },
+        {
+          "name": "Chinese Student Services",
+          "nameZh": "中国学生服务",
+          "description": "dku-chinese-student-services@dukekunshan.edu.cn",
+          "descriptionZh": "dku-chinese-student-services@dukekunshan.edu.cn",
+          "hours": "Weekdays: 9:00-12:00 & 13:00-17:30",
+          "hoursZh": "工作日：9:00-12:00 & 13:00-17:30",
+          "location": "CCTE 4100",
+          "locationZh": "社区中心东楼 4100",
+          "image": "/photos/Chinese.png",
+          "introduction": "Cultivating ethically responsible citizens through community and leadership programs",
+          "introductionZh": "通过社区和领导力项目培养有道德的公民"
+        },
+        {
+          "name": "International Student Services",
+          "nameZh": "国际学生服务",
+          "description": "DKU-ISS@dukekunshan.edu.cn",
+          "descriptionZh": "DKU-ISS@dukekunshan.edu.cn",
+          "hours": "Weekdays: 9:00-17:30",
+          "hoursZh": "工作日：9:00-17:30",
+          "location": "CCTE 4111 & 4121",
+          "locationZh": "社区中心东楼 4111 & 4121",
+          "image": "/photos/ISS.png",
+          "introduction": "Assisting international students with visas, residence permits, and cultural integration",
+          "introductionZh": "协助国际学生办理签证、居留许可和文化融合"
+        },
+        {
+          "name": "Counseling and Wellness Services (CAWS)",
+          "nameZh": "心理咨询与健康服务 (CAWS)",
+          "description": "caws@dukekunshan.edu.cn",
+          "descriptionZh": "caws@dukekunshan.edu.cn",
+          "hours": "Weekdays: 9:00-12:00 & 13:00-17:30",
+          "hoursZh": "工作日：9:00-12:00 & 13:00-17:30",
+          "location": "CCTE 4300",
+          "locationZh": "社区中心东楼 4300",
+          "image": "/photos/CAWS.png",
+          "introduction": "Promoting mental health and well-being through support and intervention services",
+          "introductionZh": "通过支持和干预服务促进心理健康和幸福感"
+        },
+        {
+          "name": "Student Conduct",
+          "nameZh": "学生行为规范",
+          "description": "studentconduct@dukekunshan.edu.cn",
+          "descriptionZh": "studentconduct@dukekunshan.edu.cn",
+          "hours": "Weekdays: 9:00-17:30",
+          "hoursZh": "工作日：9:00-17:30",
+          "location": "CCTE 4100 suite",
+          "locationZh": "社区中心东楼 4100 套间",
+          "image": "/photos/Conduct.png",
+          "introduction": "Educating students on rights and responsibilities, administering non-academic conduct",
+          "introductionZh": "教育学生了解权利和责任，管理非学术行为"
+        },
+        {
+          "name": "Case Management",
+          "nameZh": "个案管理",
+          "description": "Dku-ocm@dukekunshan.edu.cn",
+          "descriptionZh": "Dku-ocm@dukekunshan.edu.cn",
+          "hours": "Weekdays: 9:00-12:00 & 13:00-17:30",
+          "hoursZh": "工作日：9:00-12:00 & 13:00-17:30",
+          "location": "CCTE 4126",
+          "locationZh": "社区中心东楼 4126",
+          "image": "/photos/Case.png",
+          "introduction": "Identifying and supporting students facing obstacles to success and holistic wellness",
+          "introductionZh": "识别并支持面临成功和整体健康障碍的学生"
+        },
+        {
+          "name": "Student Accessibility Services Office (SASO)",
+          "nameZh": "学生无障碍服务办公室 (SASO)",
+          "description": "SASO@dukekunshan.edu.cn",
+          "descriptionZh": "SASO@dukekunshan.edu.cn",
+          "hours": "Weekdays: 9:00-12:00 & 13:00-17:30",
+          "hoursZh": "工作日：9:00-12:00 & 13:00-17:30",
+          "location": "CCTE 4116",
+          "locationZh": "社区中心东楼 4116",
+          "image": "/photos/Accessibility.png",
+          "introduction": "Providing reasonable accommodations for students with disabilities to ensure equal access",
+          "introductionZh": "为残障学生提供合理便利，确保平等机会"
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "type": "office",
+      "top": 390,
+      "left": 580,
+      "items": [
+        {
+          "name": "Library Information Desk",
+          "nameZh": "图书馆咨询台",
+          "description": "dkulibrary@dukekunshan.edu.cn",
+          "descriptionZh": "dkulibrary@dukekunshan.edu.cn",
+          "hours": "Weekdays: 9:00 - 21:00 Weekends: 14:00 - 21:00",
+          "hoursZh": "工作日：9:00 - 21:00 周末：14:00 - 21:00",
+          "location": "LIB 1F Information Desk",
+          "locationZh": "图书馆一楼咨询台",
+          "image": "/photos/library.png",
+          "introduction": "Serving as the central hub for library inquiries and research assistance",
+          "introductionZh": "作为图书馆咨询和研究辅助的中心枢纽"
+        },
+        {
+          "name": "DKU Information Technology (DKU IT)",
+          "nameZh": "DKU 信息技术 (DKU IT)",
+          "description": "service-desk@dukekunshan.edu.cn",
+          "descriptionZh": "service-desk@dukekunshan.edu.cn",
+          "hours": "Weekdays: 9:00-17:30",
+          "hoursZh": "工作日：9:00-17:30",
+          "location": "LIB 1F DKU IT Service Desk or AB2004",
+          "locationZh": "图书馆一楼 DKU IT 服务台 或 教学楼 2004",
+          "image": "/photos/IT.png",
+          "introduction": "Providing computing and technology support for students, faculty, and staff",
+          "introductionZh": "为学生、教职员工提供计算和技术支持"
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "type": "office",
+      "top": 320,
+      "left": 370,
+      "items": [
+        {
+          "name": "Writing and Language Studio",
+          "nameZh": "写作与语言工作室",
+          "description": "DKU_WLS@dukekunshan.edu.cn",
+          "descriptionZh": "DKU_WLS@dukekunshan.edu.cn",
+          "hours": "",
+          "hoursZh": "",
+          "location": "AB 2101",
+          "locationZh": "教学楼 2101",
+          "image": "/photos/WLS.png",
+          "introduction": "Supporting writing and multilingual communication skills across the community",
+          "introductionZh": "支持整个社区的写作和多语言沟通技能"
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "type": "printer",
+      "top": 390,
+      "left": 580,
+      "items": [
+        {
+          "name": "Library Printer",
+          "nameZh": "图书馆打印机",
+          "description": "LIB Printer",
+          "descriptionZh": "LIB 打印机",
+          "hours": "Open 24 hours",
+          "hoursZh": "全天开放",
+          "location": "\n1F Rooms 1010, 1118 – Ricoh (Color) \n2F Rooms 2022, 2120 – Ricoh (Color) \n3F Rooms 3109, 3113 – Ricoh (Color) \n4F Room 4115 – Ricoh (Color) ",
+          "locationZh": "\n一楼 1010, 1118 – 理光 (彩色) \n二楼 2022, 2120 – 理光 (彩色) \n三楼 3109, 3113 – 理光 (彩色) \n四楼 4115 – 理光 (彩色)"
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "type": "printer",
+      "top": 320,
+      "left": 370,
+      "items": [
+        {
+          "name": "Academic Building Printer",
+          "nameZh": "教学楼打印机",
+          "description": "AB Printer",
+          "descriptionZh": "AB 打印机",
+          "hours": "Open 24 hours",
+          "hoursZh": "全天开放",
+          "location": "\n1F Across from Room 1075 – Ricoh (BW) \n2F Room 2013 – Ricoh (Color) \n2F Near Room 2A33 – Ricoh (Color) \n2F Room 2004 – Ricoh (Color) \n3F Near Room 3221 – Ricoh (Color) \n3F Near Room 3031 – Ricoh (Color) ",
+          "locationZh": "\n一楼 1075对面 – 理光 (黑白) \n二楼 2013 – 理光 (彩色) \n二楼 2A33附近 – 理光 (彩色) \n二楼 2004 – 理光 (彩色) \n三楼 3221附近 – 理光 (彩色) \n三楼 3031附近 – 理光 (彩色)"
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "type": "printer",
+      "top": 340,
+      "left": 175,
+      "items": [
+        {
+          "name": "Conference Center Printer",
+          "nameZh": "会议中心打印机",
+          "description": "CC Printer",
+          "descriptionZh": "CC 打印机",
+          "hours": "Open 24 hours",
+          "hoursZh": "全天开放",
+          "location": "\n1F Near Room 1071 – Ricoh (Color) \n2F Near Room 2056 – Ricoh (Color) \n2F Near Room 2095 – Ricoh (Color)  ",
+          "locationZh": "\n一楼 1071附近 – 理光 (彩色) \n二楼 2056附近 – 理光 (彩色) \n二楼 2095附近 – 理光 (彩色)"
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "type": "printer",
+      "top": 190,
+      "left": 225,
+      "items": [
+        {
+          "name": "Student Residences Hall Printer",
+          "nameZh": "学生宿舍打印机",
+          "description": "",
+          "descriptionZh": "",
+          "hours": "Open 24 hours",
+          "hoursZh": "全天开放",
+          "location": "\n2F Main Lounge – Ricoh (BW)  ",
+          "locationZh": "\n二楼主休息室 – 理光 (黑白)"
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "type": "printer",
+      "top": 180,
+      "left": 661,
+      "items": [
+        {
+          "name": "Undergraduate Residence Hall Printer",
+          "nameZh": "本科生宿舍打印机",
+          "description": "",
+          "descriptionZh": "",
+          "hours": "Open 24 hours",
+          "hoursZh": "全天开放",
+          "location": "\nA#1102, B#1001, C#1102, D#1001, E#1102, F#1001, G#1102, H#1001 – Ricoh (BW)   ",
+          "locationZh": "\nA#1102, B#1001, C#1102, D#1001, E#1102, F#1001, G#1102, H#1001 – 理光 (黑白)"
+        }
+      ]
+    },
+    {
+      "id": 23,
+      "type": "printer",
+      "top": 240,
+      "left": 487,
+      "items": [
+        {
+          "name": "Graduate Center Printer",
+          "nameZh": "研究生中心打印机",
+          "description": "",
+          "descriptionZh": "",
+          "hours": "Open 24 hours",
+          "hoursZh": "全天开放",
+          "location": "\n1F Room 1102 – Ricoh (BW) ",
+          "locationZh": "\n一楼 1102 – 理光 (黑白)"
+        }
+      ]
+    },
+    {
+      "id": 24,
+      "type": "printer",
+      "top": 480,
+      "left": 290,
+      "items": [
+        {
+          "name": "Innovation Building Printer",
+          "nameZh": "创新楼打印机",
+          "description": "IB Printer",
+          "descriptionZh": "IB 打印机",
+          "hours": "Open 24 hours",
+          "hoursZh": "全天开放",
+          "location": "\n1F West Hallway – Ricoh (Color) \n1F East Hallway – Ricoh (Color) \n2F Rooms 2016, 2031, 2062 – Ricoh (Color) \n3F Rooms 3028, 3031 (Stapler), 3088 – Ricoh (Color/BW)  ",
+          "locationZh": "\n一楼西走廊 – 理光 (彩色) \n一楼东走廊 – 理光 (彩色) \n二楼 2016, 2031, 2062 – 理光 (彩色) \n三楼 3028, 3031 (带订书机), 3088 – 理光 (彩色/黑白)"
+        }
+      ]
+    },
+    {
+      "id": 25,
+      "type": "printer",
+      "top": 390,
+      "left": 755,
+      "items": [
+        {
+          "name": "Administration Building Printer",
+          "nameZh": "行政楼打印机",
+          "description": "ADB Printer",
+          "descriptionZh": "ADB 打印机",
+          "hours": "Open 24 hours",
+          "hoursZh": "全天开放",
+          "location": "\n1F Rooms 1021, 1107A, 1208 – Ricoh (Color) \n2F Rooms 2003, 2203C – Ricoh (Color) \n3F Rooms 3003, 3014, 3201A – Ricoh (Color) \n4F Rooms 4003, 4201 – Ricoh (Color)  ",
+          "locationZh": "\n一楼 1021, 1107A, 1208 – 理光 (彩色) \n二楼 2003, 2203C – 理光 (彩色) \n三楼 3003, 3014, 3201A – 理光 (彩色) \n四楼 4003, 4201 – 理光 (彩色)"
+        }
+      ]
+    },
+    {
+      "id": 26,
+      "type": "printer",
+      "top": 295,
+      "left": 840,
+      "items": [
+        {
+          "name": "Sports Complex Printer",
+          "nameZh": "体育馆打印机",
+          "description": "SC Printer",
+          "descriptionZh": "SC 打印机",
+          "hours": "Open 24 hours",
+          "hoursZh": "全天开放",
+          "location": "\n2F Room 2108 – Ricoh (Color)  ",
+          "locationZh": "\n二楼 2108 – 理光 (彩色)"
+        }
+      ]
+    },
+    {
+      "id": 27,
+      "type": "printer",
+      "top": 300,
+      "left": 685,
+      "items": [
+        {
+          "name": "Community Center E Printer",
+          "nameZh": "社区中心东楼打印机",
+          "description": "CCTE Printer",
+          "descriptionZh": "CCTE 打印机",
+          "hours": "Open 24 hours",
+          "hoursZh": "全天开放",
+          "location": "\n1F Room 1019D – Ricoh (Color) \n4F Room 4132 – Ricoh (Color) ",
+          "locationZh": "\n一楼 1019D – 理光 (彩色) \n四楼 4132 – 理光 (彩色)"
+        }
+      ]
+    },
+    {
+      "id": 28,
+      "type": "printer",
+      "top": 470,
+      "left": 470,
+      "items": [
+        {
+          "name": "WHU-DUKE Research Institute Printer",
+          "nameZh": "武大-杜克研究院打印机",
+          "description": "WDR Printer",
+          "descriptionZh": "WDR 打印机",
+          "hours": "Open 24 hours",
+          "hoursZh": "全天开放",
+          "location": "\n1F Room 1129 – Ricoh (Color) \n1F Near Room 1012– Ricoh (Color) \n2F Rooms 2129, 2212 – Ricoh (Color) \n3F Rooms 3212, 3131 (Stapler) – Ricoh (Color) ",
+          "locationZh": "\n一楼 1129 – 理光 (彩色) \n一楼 1012附近 – 理光 (彩色) \n二楼 2129, 2212 – 理光 (彩色) \n三楼 3212, 3131 (带订书机) – 理光 (彩色)"
+        }
+      ]
+    },
+    {
+      "id": 29,
+      "type": "office",
+      "top": 480,
+      "left": 290,
+      "items": [
+        {
+          "name": "DKU Innovation and Entrepreneurship Initiative (DKU InE)",
+          "nameZh": "DKU 创新与创业中心 (DKU InE)",
+          "description": "dku-innovation@dukekunshan.edu.cn",
+          "descriptionZh": "dku-innovation@dukekunshan.edu.cn",
+          "location": "IB 2F",
+          "locationZh": "创新楼二楼",
+          "image": "/photos/INE.png",
+          "introduction": "Fostering creativity, social responsibility, and visionary entrepreneurship",
+          "introductionZh": "培养创造力、社会责任感和有远见的创业精神"
+        },
+        {
+          "name": "Center for Teaching and Learning",
+          "nameZh": "教学与学习中心",
+          "description": "dku_ctl@dukekunshan.edu.cn",
+          "descriptionZh": "dku_ctl@dukekunshan.edu.cn",
+          "location": "IB 3018",
+          "locationZh": "创新楼 3018",
+          "image": "/photos/learning.png",
+          "introduction": "Supporting faculty with innovative, evidence-based teaching practices",
+          "introductionZh": "以创新的循证教学实践支持教师"
+        }
+      ]
+    },
+    {
+      "id": 30,
+      "type": "office",
+      "top": 390,
+      "left": 755,
+      "items": [
+        {
+          "name": "Office of Undergraduate Advising",
+          "nameZh": "本科生指导办公室",
+          "description": "advising@dukekunshan.edu.cn / DKU-arc@dukekunshan.edu.cn",
+          "descriptionZh": "advising@dukekunshan.edu.cn / DKU-arc@dukekunshan.edu.cn",
+          "location": "ADB 1F",
+          "locationZh": "行政楼一楼",
+          "image": "/photos/Advising.png",
+          "introduction": "Guiding students through the interdisciplinary DKU curriculum",
+          "introductionZh": "指导学生完成跨学科的 DKU 课程"
+        },
+        {
+          "name": "Office of Assessment",
+          "nameZh": "评估办公室",
+          "description": "dku_assessment@dukekunshan.edu.cn",
+          "descriptionZh": "dku_assessment@dukekunshan.edu.cn",
+          "location": "ADB 1020",
+          "locationZh": "行政楼 1020",
+          "image": "/photos/Assessment.png",
+          "introduction": "Leading assessment to improve teaching, learning, and institutional effectiveness",
+          "introductionZh": "引领评估以改进教学、学习和机构效能"
+        },
+        {
+          "name": "Office of the Registrar",
+          "nameZh": "注册办公室",
+          "description": "dku-registrar@dukekunshan.edu.cn",
+          "descriptionZh": "dku-registrar@dukekunshan.edu.cn",
+          "location": "ADB 1107",
+          "locationZh": "行政楼 1107",
+          "image": "/photos/Registrar.png",
+          "introduction": "Managing academic records, calendars, and registration services",
+          "introductionZh": "管理学术记录、校历和注册服务"
+        }
+      ]
+    },
+    {
+      "id": 31,
+      "type": "office",
+      "top": 340,
+      "left": 175,
+      "items": [
+        {
+          "name": "Language and Culture Center",
+          "nameZh": "语言与文化中心",
+          "description": "DKU-LCC@dukekunshan.edu.cn",
+          "descriptionZh": "DKU-LCC@dukekunshan.edu.cn",
+          "location": "CC 1070",
+          "locationZh": "会议中心 1070",
+          "image": "/photos/Language.png",
+          "introduction": "Offering language courses in English, Chinese, and additional languages",
+          "introductionZh": "提供英语、中文及其他语言课程"
+        }
+      ]
+    },
+    {
+      "id": 32,
+      "type": "office",
+      "top": 180,
+      "left": 661,
+      "items": [
+        {
+          "name": "Residence Life",
+          "nameZh": "住宿生活",
+          "description": "residencelife@dukekunshan.edu.cn",
+          "descriptionZh": "residencelife@dukekunshan.edu.cn",
+          "hours": "Weekdays: 9:00-17:30",
+          "hoursZh": "工作日：9:00-17:30",
+          "location": "\nGraduate Apartments 1110 suite\nBuilding 15A 1101\nBuilding 15C 1101\nBuilding 15E 1101\nBuilding 15G 1101",
+          "locationZh": "\n研究生公寓 1110 套间\n15A 楼 1101\n15C 楼 1101\n15E 楼 1101\n15G 楼 1101",
+          "image": "/photos/Residence.png",
+          "introduction": "Building inclusive campus communities and managing residential life programs",
+          "introductionZh": "建设包容的校园社区并管理住宿生活项目"
+        }
+      ]
+    },
+    {
+      "id": 33,
+      "type": "office",
+      "top": 295,
+      "left": 840,
+      "items": [
+        {
+          "name": "Athletes",
+          "nameZh": "体育办公室",
+          "description": "sports@dukekunshan.edu.cn",
+          "descriptionZh": "sports@dukekunshan.edu.cn",
+          "location": "SC 2F",
+          "locationZh": "体育馆二楼",
+          "image": "/photos/Athletes.png",
+          "introduction": "Cultivating values through sport, fitness, and wellness for student success",
+          "introductionZh": "通过体育、健身和健康培养学生的价值观"
+        }
+      ]
+    },
+    {
+      "id": 2001,
+      "type": "amenity",
+      "top": 300,
+      "left": 685,
+      "items": [
+        {
+          "name": "Ice Maker",
+          "nameZh": "制冰机",
+          "description": "Ice Dispenser",
+          "descriptionZh": "冰块机",
+          "hours": "24 hours",
+          "hoursZh": "全天",
+          "location": "CCTE 1F",
+          "locationZh": "社区中心东楼一楼"
+        }
+      ]
+    },
+    {
+      "id": 2020,
+      "type": "amenity",
+      "top": 310,
+      "left": 585,
+      "items": [
+        {
+          "name": "Canteen",
+          "nameZh": "食堂",
+          "description": "Campus Canteen",
+          "descriptionZh": "校园食堂",
+          "hours": "7:00 - 19:30",
+          "hoursZh": "7:00 - 19:30",
+          "location": "CCTE 1F",
+          "locationZh": "社区中心东楼一楼",
+          "image": "/photos/CCTW.jpg"
+        },
+        {
+          "name": "Coffee Shop 咖啡厅",
+          "nameZh": "咖啡厅",
+          "description": "Campus Coffee",
+          "descriptionZh": "校园咖啡",
+          "hours": "8:00 - 19:00",
+          "hoursZh": "8:00 - 19:00",
+          "location": "CCTF 1F",
+          "locationZh": "CCTF 一楼"
+        }
+      ]
+    },
+    {
+      "id": 2021,
+      "type": "amenity",
+      "top": 310,
+      "left": 550,
+      "items": [
+        {
+          "name": "FamilyMart 全家便利店",
+          "nameZh": "全家便利店",
+          "description": "Convenience Store",
+          "descriptionZh": "便利店",
+          "location": "CCTF 1F",
+          "locationZh": "CCTF 一楼",
+          "image": "/photos/familymart.jpg"
+        }
+      ]
+    },
+    {
+      "id": 2002,
+      "type": "amenity",
+      "top": 320,
+      "left": 370,
+      "items": [
+        {
+          "name": "Never Mind Cafe 奈娃咖啡",
+          "nameZh": "奈娃咖啡",
+          "description": "Coffee & Study Lounge",
+          "descriptionZh": "咖啡与学习休息室",
+          "hours": "8:00 - 18:00",
+          "hoursZh": "8:00 - 18:00",
+          "location": "Academic Building (AB) 1F",
+          "locationZh": "教学楼 (AB) 一楼",
+          "image": "/photos/nevermind.jpg"
+        }
+      ]
+    },
+    {
+      "id": 2025,
+      "type": "amenity",
+      "top": 370,
+      "left": 370,
+      "items": [
+        {
+          "name": "Ice Maker",
+          "nameZh": "制冰机",
+          "description": "Ice Dispenser",
+          "descriptionZh": "冰块机",
+          "hours": "24 hours",
+          "hoursZh": "全天",
+          "location": "AB 1F, 2F, 3F",
+          "locationZh": "教学楼一楼、二楼、三楼"
+        }
+      ]
+    },
+    {
+      "id": 2003,
+      "type": "amenity",
+      "top": 390,
+      "left": 580,
+      "items": [
+        {
+          "name": "Ice Maker",
+          "nameZh": "制冰机",
+          "description": "Ice Dispenser",
+          "descriptionZh": "冰块机",
+          "hours": "24 hours",
+          "hoursZh": "全天",
+          "location": "LIB 2F (west side, near office pantry)",
+          "locationZh": "图书馆二楼 (西侧，办公室茶水间旁)"
+        }
+      ]
+    },
+    {
+      "id": 2004,
+      "type": "amenity",
+      "top": 390,
+      "left": 755,
+      "items": [
+        {
+          "name": "Ice Maker",
+          "nameZh": "制冰机",
+          "description": "Ice Dispenser",
+          "descriptionZh": "冰块机",
+          "hours": "24 hours",
+          "hoursZh": "全天",
+          "location": "ADB 1F",
+          "locationZh": "行政楼一楼"
+        }
+      ]
+    },
+    {
+      "id": 2005,
+      "type": "amenity",
+      "top": 404,
+      "left": 128,
+      "items": [
+        {
+          "name": "Parking Lot",
+          "nameZh": "停车场",
+          "description": "Parking Lot",
+          "descriptionZh": "停车场",
+          "hours": "24 hours",
+          "hoursZh": "全天",
+          "location": "Near CC",
+          "locationZh": "会议中心附近"
+        }
+      ]
+    },
+    {
+      "id": 2016,
+      "type": "amenity",
+      "top": 138,
+      "left": 206,
+      "items": [
+        {
+          "name": "Parking Lot",
+          "nameZh": "停车场",
+          "description": "Parking Lot",
+          "descriptionZh": "停车场",
+          "hours": "24 hours",
+          "hoursZh": "全天",
+          "location": "Near Residence Hall",
+          "locationZh": "宿舍楼附近"
+        }
+      ]
+    },
+    {
+      "id": 2006,
+      "type": "amenity",
+      "top": 87,
+      "left": 932,
+      "items": [
+        {
+          "name": "Underground Parking",
+          "nameZh": "地下停车场",
+          "description": "Underground Parking (Public)",
+          "descriptionZh": "地下停车场 (公共)",
+          "hours": "24 hours",
+          "hoursZh": "全天",
+          "location": "Near the North Gate",
+          "locationZh": "北门附近"
+        }
+      ]
+    },
+    {
+      "id": 2007,
+      "type": "amenity",
+      "top": 265,
+      "left": 913,
+      "items": [
+        {
+          "name": "Underground Parking",
+          "nameZh": "地下停车场",
+          "description": "Underground Parking (DKU Member Only)",
+          "descriptionZh": "地下停车场 (仅限DKU成员)",
+          "hours": "24 hours",
+          "hoursZh": "全天",
+          "location": "Near Sports Complex",
+          "locationZh": "体育馆附近"
+        }
+      ]
+    },
+    {
+      "id": 2008,
+      "type": "amenity",
+      "top": 135,
+      "left": 230,
+      "items": [
+        {
+          "name": "Shuttle Bus Stop",
+          "nameZh": "班车点",
+          "description": "Shuttle Bus Stop - Residence Hall",
+          "descriptionZh": "班车点 - 宿舍楼",
+          "location": "Near Residence Hall",
+          "locationZh": "宿舍楼附近"
+        }
+      ]
+    },
+    {
+      "id": 2009,
+      "type": "amenity",
+      "top": 63,
+      "left": 650,
+      "items": [
+        {
+          "name": "Shuttle Bus Stop",
+          "nameZh": "班车点",
+          "description": "Shuttle Bus Stop - Undergrad Residence",
+          "descriptionZh": "班车点 - 本科生宿舍",
+          "location": "Near Undergrad Residence",
+          "locationZh": "本科生宿舍附近"
+        }
+      ]
+    },
+    {
+      "id": 2010,
+      "type": "amenity",
+      "top": 518,
+      "left": 605,
+      "items": [
+        {
+          "name": "Shuttle Bus Stop",
+          "nameZh": "班车点",
+          "description": "Shuttle Bus Stop - South Gate",
+          "descriptionZh": "班车点 - 南门",
+          "location": "Near South Gate",
+          "locationZh": "南门附近"
+        }
+      ]
+    },
+    {
+      "id": 2017,
+      "type": "amenity",
+      "top": 447,
+      "left": 929,
+      "items": [
+        {
+          "name": "Shuttle Bus Stop",
+          "nameZh": "班车点",
+          "description": "Shuttle Bus Stop - Employee Center",
+          "descriptionZh": "班车点 - 员工中心",
+          "location": "Near Employee Center",
+          "locationZh": "员工中心附近"
+        }
+      ]
+    },
+    {
+      "id": 2011,
+      "type": "amenity",
+      "top": 78,
+      "left": 468,
+      "items": [
+        {
+          "name": "EV Charging Station",
+          "nameZh": "电动车充电站",
+          "description": "Electric Bike Charging Station",
+          "descriptionZh": "电动自行车充电站",
+          "hours": "24 hours",
+          "hoursZh": "全天",
+          "location": "Near Service Building",
+          "locationZh": "服务楼附近"
+        }
+      ]
+    },
+    {
+      "id": 2012,
+      "type": "amenity",
+      "top": 80,
+      "left": 534,
+      "items": [
+        {
+          "name": "EV Charging Station",
+          "nameZh": "电动车充电站",
+          "description": "Electric Bike Charging Station",
+          "descriptionZh": "电动自行车充电站",
+          "hours": "24 hours",
+          "hoursZh": "全天",
+          "location": "Near Undergrad Residence(H)",
+          "locationZh": "本科生宿舍 (H) 附近"
+        }
+      ]
+    },
+    {
+      "id": 2013,
+      "type": "amenity",
+      "top": 70,
+      "left": 745,
+      "items": [
+        {
+          "name": "EV Charging Station",
+          "nameZh": "电动车充电站",
+          "description": "Electric Bike Charging Station",
+          "descriptionZh": "电动自行车充电站",
+          "hours": "24 hours",
+          "hoursZh": "全天",
+          "location": "Near Undergrad Residence(D)",
+          "locationZh": "本科生宿舍 (D) 附近"
+        }
+      ]
+    },
+    {
+      "id": 2014,
+      "type": "amenity",
+      "top": 230,
+      "left": 930,
+      "items": [
+        {
+          "name": "EV Charging Station",
+          "nameZh": "电动车充电站",
+          "description": "Electric Bike Charging Station",
+          "descriptionZh": "电动自行车充电站",
+          "hours": "24 hours",
+          "hoursZh": "全天",
+          "location": "Near Soccer Field",
+          "locationZh": "足球场附近"
+        }
+      ]
+    },
+    {
+      "id": 2015,
+      "type": "amenity",
+      "top": 446,
+      "left": 895,
+      "items": [
+        {
+          "name": "EV Charging Station",
+          "nameZh": "电动车充电站",
+          "description": "Electric Bike Charging Station",
+          "descriptionZh": "电动自行车充电站",
+          "hours": "24 hours",
+          "hoursZh": "全天",
+          "location": "Near Employee Center",
+          "locationZh": "员工中心附近"
+        }
+      ]
+    }
+  ],
+  "extraOfficeItems": [
+    {
+      "id": "extra-1",
+      "name": "Office of Academic Affairs",
+      "nameZh": "学术事务办公室",
+      "description": "dku-academicaffairs@dukekunshan.edu.cn",
+      "descriptionZh": "dku-academicaffairs@dukekunshan.edu.cn",
+      "introduction": "Advancing inquiry-based teaching to prepare students for complex global challenges",
+      "introductionZh": "推进探究式教学，为学生应对复杂的全球挑战做好准备",
+      "location": "",
+      "locationZh": "",
+      "image": ""
+    },
+    {
+      "id": "extra-2",
+      "name": "Institute for Global Higher Education",
+      "nameZh": "全球高等教育研究所",
+      "description": "",
+      "descriptionZh": "",
+      "introduction": "Advancing global education through collaborative research and innovation",
+      "introductionZh": "通过合作研究与创新推进全球教育",
+      "location": "",
+      "locationZh": "",
+      "image": ""
+    },
+    {
+      "id": "extra-3",
+      "name": "Research Support Office",
+      "nameZh": "科研支持办公室",
+      "description": "research-support@dukekunshan.edu.cn",
+      "descriptionZh": "research-support@dukekunshan.edu.cn",
+      "introduction": "Administering sponsored research projects and ensuring compliance",
+      "introductionZh": "管理资助研究项目并确保合规",
+      "location": "",
+      "locationZh": "",
+      "image": ""
+    },
+    {
+      "id": "extra-4",
+      "name": "Global Education",
+      "nameZh": "全球教育",
+      "description": "dku-globaledu@dukekunshan.edu.cn",
+      "descriptionZh": "dku-globaledu@dukekunshan.edu.cn",
+      "introduction": "Supporting students with study away opportunities and global learning",
+      "introductionZh": "支持学生海外学习和全球学习机会",
+      "location": "",
+      "locationZh": "",
+      "image": ""
+    },
+    {
+      "id": "extra-5",
+      "name": "Office of Faculty Affairs",
+      "nameZh": "教师事务办公室",
+      "description": "dku_facultyaffairs@dukekunshan.edu.cn",
+      "descriptionZh": "dku_facultyaffairs@dukekunshan.edu.cn",
+      "introduction": "Supporting faculty in scholarship, teaching, and professional growth",
+      "introductionZh": "支持教师的学术、教学和专业成长",
+      "location": "",
+      "locationZh": "",
+      "image": ""
+    }
+  ]
+}
