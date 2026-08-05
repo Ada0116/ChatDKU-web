@@ -37,6 +37,25 @@ export type WeeklyEvent = {
 
 export type ExtraOfficeItem = SubItem & { id: string };
 
+/**
+ * A weekly event rendered as a map marker item. It fills in the `SubItem` shape
+ * the marker UI expects while keeping the untouched API record on `rawEvent`,
+ * which the event detail view reads for the fields `SubItem` has no slot for
+ * (sponsor, speaker, open_to, url).
+ */
+export type EventSubItem = SubItem & { rawEvent: WeeklyEvent };
+
+/** A weekly event rendered as a list row, with the map marker it resolved to. */
+export type EventListItem = WeeklyEvent & {
+  markerId: number;
+  markerType: "event";
+  itemIndex: number;
+};
+
+export function isEventSubItem(item: SubItem): item is EventSubItem {
+  return "rawEvent" in item;
+}
+
 export type ListItem = SubItem & {
   markerId: number;
   markerType: Marker["type"];

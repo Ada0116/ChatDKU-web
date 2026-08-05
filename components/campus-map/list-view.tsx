@@ -1,21 +1,16 @@
 import { ResourceCard } from "./resource-card";
 import { Button } from "@/components/ui/button";
-import type { ListItem, MarkerType, WeeklyEvent } from "./types";
-
-/** Event item with optional map marker info */
-type EventListItem = WeeklyEvent & { markerId: number };
+import type { EventListItem, ListItem, MarkerType } from "./types";
 
 function EventCard({
   ev,
   hasMapMarker,
   onViewOnMap,
-  onMoreInfo,
   lang,
 }: {
   ev: EventListItem;
   hasMapMarker: boolean;
   onViewOnMap: () => void;
-  onMoreInfo?: () => void;
   lang: "en" | "zh";
 }) {
   const isZh = lang === "zh";
@@ -111,8 +106,7 @@ export function ListView({
   showSearch = true,
   onToggleLang,
 }: {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  items: any[];
+  items: (ListItem | EventListItem)[];
   selectedType: MarkerType;
   onAsk: (reference: string) => void;
   onViewOnMap: (markerId: number, itemIndex: number) => void;
@@ -137,8 +131,8 @@ export function ListView({
   const sortedItems =
     selectedType === "amenity"
       ? [...items].sort((a, b) => {
-          const aIsIce = (a as any).name?.includes("Ice Maker");
-          const bIsIce = (b as any).name?.includes("Ice Maker");
+          const aIsIce = (a as ListItem).name?.includes("Ice Maker");
+          const bIsIce = (b as ListItem).name?.includes("Ice Maker");
           if (aIsIce && !bIsIce) return 1;
           if (!aIsIce && bIsIce) return -1;
           return 0;
@@ -209,7 +203,7 @@ export function ListView({
           {sortedItems.map((item, idx) => {
             // Events are passed as WeeklyEvent items in the list
             if (selectedType === "event") {
-              const ev = item as unknown as EventListItem;
+              const ev = item as EventListItem;
               const hasMapMarker = ev.markerId !== 0;
               return (
                 <div
@@ -228,7 +222,7 @@ export function ListView({
             return (
               <ResourceCard
                 key={`${item.markerId}-${idx}`}
-                item={item}
+                item={item as ListItem}
                 onAsk={onAsk}
                 onViewOnMap={onViewOnMap}
                 lang={lang}
