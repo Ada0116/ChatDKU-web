@@ -83,9 +83,9 @@ export default function AcademicCalendar() {
 
   return (
     <div className="w-full h-[calc(100vh-110px)] max-w-6xl mx-auto px-4 py-3">
-      <div className="h-full overflow-hidden rounded-[30px] border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#0f1117] shadow-2xl">
+      <div className="h-full overflow-hidden rounded-[30px] border border-border bg-card shadow-2xl">
         {/* HEADER */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <h2 className="text-2xl font-bold tracking-tight">
             Academic Calendar
           </h2>
@@ -95,7 +95,7 @@ export default function AcademicCalendar() {
                 if (month === 0) { setMonth(11); setYear((y) => y - 1); }
                 else { setMonth((m) => m - 1); }
               }}
-              className="w-10 h-10 rounded-2xl bg-gray-100 dark:bg-gray-800 hover:scale-105 transition-all flex items-center justify-center"
+              className="w-10 h-10 rounded-2xl bg-muted hover:scale-105 transition-all flex items-center justify-center"
             >
               ←
             </button>
@@ -107,25 +107,25 @@ export default function AcademicCalendar() {
                   setPickerYear(year);
                   setPickerOpen(!pickerOpen);
                 }}
-                className="min-w-[150px] px-3 py-2 rounded-xl font-semibold text-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                className="min-w-[150px] px-3 py-2 rounded-xl font-semibold text-lg hover:bg-muted transition-colors"
               >
                 {MONTHS[month]} {year}
               </button>
 
               {pickerOpen && (
-                <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 z-50 bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800 p-4 w-64">
+                <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 z-50 bg-popover rounded-2xl shadow-2xl border border-border p-4 w-64">
                   {/* Year nav */}
                   <div className="flex items-center justify-between mb-3">
                     <button
                       onClick={() => setPickerYear((y) => y - 1)}
-                      className="w-8 h-8 rounded-xl bg-gray-100 dark:bg-gray-800 hover:scale-105 transition-all flex items-center justify-center text-sm"
+                      className="w-8 h-8 rounded-xl bg-muted hover:scale-105 transition-all flex items-center justify-center text-sm"
                     >
                       ←
                     </button>
                     <span className="font-semibold text-base">{pickerYear}</span>
                     <button
                       onClick={() => setPickerYear((y) => y + 1)}
-                      className="w-8 h-8 rounded-xl bg-gray-100 dark:bg-gray-800 hover:scale-105 transition-all flex items-center justify-center text-sm"
+                      className="w-8 h-8 rounded-xl bg-muted hover:scale-105 transition-all flex items-center justify-center text-sm"
                     >
                       →
                     </button>
@@ -148,10 +148,10 @@ export default function AcademicCalendar() {
                           className={`
                             py-2 rounded-xl text-sm font-medium transition-all
                             ${isActive
-                              ? "bg-blue-500 text-white shadow-md"
+                              ? "bg-primary text-primary-foreground shadow-md"
                               : isCurrent
                               ? "bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300"
-                              : "hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400"
+                              : "hover:bg-muted text-muted-foreground"
                             }
                           `}
                         >
@@ -169,7 +169,7 @@ export default function AcademicCalendar() {
                 if (month === 11) { setMonth(0); setYear((y) => y + 1); }
                 else { setMonth((m) => m + 1); }
               }}
-              className="w-10 h-10 rounded-2xl bg-gray-100 dark:bg-gray-800 hover:scale-105 transition-all flex items-center justify-center"
+              className="w-10 h-10 rounded-2xl bg-muted hover:scale-105 transition-all flex items-center justify-center"
             >
               →
             </button>
@@ -185,7 +185,7 @@ export default function AcademicCalendar() {
               {WEEKDAYS.map((day) => (
                 <div
                   key={day}
-                  className="text-center text-xs font-semibold text-gray-400"
+                  className="text-center text-xs font-semibold text-muted-foreground"
                 >
                   {day}
                 </div>
@@ -219,10 +219,10 @@ export default function AcademicCalendar() {
                       hover:scale-[1.02] min-h-0 h-full
                       ${
                         isSelected
-                          ? "border-blue-300 bg-blue-50 dark:bg-blue-500/10 dark:border-blue-500/30 shadow-md"
+                          ? "border-primary bg-primary/10 shadow-md"
                           : isToday
                           ? "border-amber-300 dark:border-amber-500/40 bg-amber-50/90 dark:bg-amber-500/15 shadow-sm"
-                          : "border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900/50 hover:border-gray-300 dark:hover:border-gray-700"
+                          : "border-border bg-muted/50 hover:border-muted-foreground/40"
                       }
                     `}
                   >
@@ -238,7 +238,7 @@ export default function AcademicCalendar() {
                         className={`text-sm font-bold flex-shrink-0 ${
                           events.length > 0
                             ? getEventStyles(events[0].type).text
-                            : "text-gray-700 dark:text-gray-200"
+                            : "text-foreground"
                         }`}
                       >
                         {day}
@@ -261,11 +261,11 @@ export default function AcademicCalendar() {
           </div>
 
           {/* RIGHT PANEL */}
-          <div className="border-l border-gray-100 dark:border-gray-800 bg-gray-50/40 dark:bg-black/20 p-5 overflow-y-auto">
+          <div className="border-l border-border bg-muted/30 p-5 overflow-y-auto">
             <h3 className="text-lg font-bold">{selectedDate}</h3>
             <div className="mt-5 space-y-3">
               {selectedEvents.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-gray-300 dark:border-gray-700 p-8 text-center text-sm text-gray-500">
+                <div className="rounded-2xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
                   No events
                 </div>
               ) : (
@@ -285,7 +285,7 @@ export default function AcademicCalendar() {
                             e.stopPropagation();
                             downloadCalendarFile(event);
                           }}
-                          className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition-colors text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 border border-gray-200 dark:border-gray-700"
+                          className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition-colors text-xs text-muted-foreground hover:text-foreground border border-border"
                         >
                           <svg
                             width="14"
@@ -308,11 +308,11 @@ export default function AcademicCalendar() {
                         </button>
                       </div>
                       {event.description && (
-                        <div className="mt-2 text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
+                        <div className="mt-2 text-sm text-muted-foreground leading-relaxed">
                           {event.description}
                         </div>
                       )}
-                      <div className="mt-2 text-xs text-gray-400">
+                      <div className="mt-2 text-xs text-muted-foreground">
                         {event.startDate}
                         {event.endDate && ` → ${event.endDate}`}
                       </div>
@@ -324,7 +324,7 @@ export default function AcademicCalendar() {
 
             {/* LEGEND */}
             <div className="mt-7">
-              <div className="text-sm font-semibold text-gray-500 mb-3">
+              <div className="text-sm font-semibold text-muted-foreground mb-3">
                 Categories
               </div>
               <div className="space-y-2 text-sm">
