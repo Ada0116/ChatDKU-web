@@ -33,6 +33,14 @@ export const API_ENDPOINTS = {
     `/api/chat/${encodeURIComponent(chatId)}?sessionId=${encodeURIComponent(sessionId)}`,
   /** chat.views.FeedbackView */
   FEEDBACK: '/api/feedback',
+  /**
+   * chat.views.WeeklyEventsView -> { events: [{ title, date, start_time, … }] }
+   *
+   * No trailing slash: chat/urls.py registers this as a plain `path('events')`
+   * outside the router, so Django's APPEND_SLASH redirect does not apply.
+   */
+  EVENTS: (startDate: string, endDate: string) =>
+    `/api/events?start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}`,
   /** SessionViewSet.create_session -> 201 { session_id } */
   NEW_SESSION: '/api/c/create_session/',
   /** SessionViewSet.list -> [{ id, title, created_at }] */

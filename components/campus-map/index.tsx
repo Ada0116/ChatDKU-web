@@ -7,9 +7,14 @@ import { MapView } from "./map-view";
 import { ListView } from "./list-view";
 import { MapModal } from "./map-modal";
 import { Button } from "@/components/ui/button";
+import { API_ENDPOINTS } from "@/lib/constants";
 import {
   buildListItems,
+  isEventSubItem,
+  type EventListItem,
+  type EventSubItem,
   type ExtraOfficeItem,
+  type ListItem,
   type Marker,
   type MarkerType,
   type WeeklyEvent,
@@ -157,7 +162,7 @@ function buildEventMarkers(
       });
     }
     const group = map.get(key)!;
-    const item: any = {
+    const item: EventSubItem = {
       name: ev.title,
       description: `${ev.date} ${ev.start_time || ""} - ${ev.end_time || ""}`,
       location: ev.location,
@@ -191,22 +196,18 @@ function useWeeklyEvents() {
     setError(null);
     try {
       const { start, end } = getThisWeekRange();
-      const response = await fetch(
-        `/api/weekly-events?start_date=${start}&end_date=${end}`,
-        {
-          method: "GET",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-        },
-      );
+      const response = await fetch(API_ENDPOINTS.EVENTS(start, end), {
+        method: "GET",
+        credentials: "include",
+      });
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       const data = await response.json();
-      setEvents(data.events || []);
-    } catch (err: any) {
+      setEvents(data.events ?? []);
+    } catch (err) {
       console.error("Failed to fetch weekly events:", err);
-      setError(err.message);
+      setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
       setLoading(false);
       fetchingRef.current = false;
@@ -293,7 +294,7 @@ export default function CampusMap({
   );
 
   // For events, build a separate list from the events array
-  const eventListItems = useMemo(() => {
+  const eventListItems = useMemo<EventListItem[]>(() => {
     if (selectedType !== "event") return [];
     return events.map((ev, idx) => {
       const abbr = extractBuildingAbbr(ev.location);
@@ -303,7 +304,7 @@ export default function CampusMap({
         markerId: coord ? coord.markerId : 0,
         markerType: "event" as const,
         itemIndex: idx,
-      } as any;
+      };
     });
   }, [events, allStaticMarkers, selectedType]);
 
@@ -314,9 +315,9 @@ export default function CampusMap({
   const displayedItems = useMemo(() => {
     if (!searchQuery.trim()) return rawListItems;
     const q = searchQuery.toLowerCase().trim();
-    return rawListItems.filter((item: any) => {
+    return rawListItems.filter((item: ListItem | EventListItem) => {
       if (selectedType === "event") {
-        const ev = item as WeeklyEvent;
+        const ev = item as EventListItem;
         return (
           ev.title?.toLowerCase().includes(q) ||
           ev.location?.toLowerCase().includes(q) ||
@@ -324,14 +325,15 @@ export default function CampusMap({
           ev.speaker?.toLowerCase().includes(q)
         );
       }
-      const name = item.name?.toLowerCase() || "";
-      const nameZh = item.nameZh?.toLowerCase() || "";
-      const desc = item.description?.toLowerCase() || "";
-      const descZh = item.descriptionZh?.toLowerCase() || "";
-      const intro = item.introduction?.toLowerCase() || "";
-      const introZh = item.introductionZh?.toLowerCase() || "";
-      const loc = item.location?.toLowerCase() || "";
-      const locZh = item.locationZh?.toLowerCase() || "";
+      const listItem = item as ListItem;
+      const name = listItem.name?.toLowerCase() || "";
+      const nameZh = listItem.nameZh?.toLowerCase() || "";
+      const desc = listItem.description?.toLowerCase() || "";
+      const descZh = listItem.descriptionZh?.toLowerCase() || "";
+      const intro = listItem.introduction?.toLowerCase() || "";
+      const introZh = listItem.introductionZh?.toLowerCase() || "";
+      const loc = listItem.location?.toLowerCase() || "";
+      const locZh = listItem.locationZh?.toLowerCase() || "";
       return (
         name.includes(q) ||
         nameZh.includes(q) ||
@@ -371,7 +373,7 @@ export default function CampusMap({
       const ev = events[itemIndex];
       if (ev && targetMarker.items.length > 0) {
         const found = targetMarker.items.findIndex(
-          (item: any) => item.rawEvent?.title === ev.title,
+          (item) => isEventSubItem(item) && item.rawEvent.title === ev.title,
         );
         resolvedIndex = found >= 0 ? found : 0;
       } else {
