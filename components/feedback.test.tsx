@@ -34,7 +34,7 @@ vi.mock('@/components/side', () => ({ __esModule: true, default: () => <div /> }
 vi.mock('@/components/WelcomeBanner', () => ({ __esModule: true, default: () => <div /> }));
 vi.mock('@/components/doc-manager', () => ({ DocumentManager: () => <div /> }));
 vi.mock('@/components/prompt_recs', () => ({ PromptRecs: () => <div /> }));
-vi.mock('@/components/CampusMap', () => ({ __esModule: true, default: () => <div /> }));
+vi.mock('@/components/campus-map', () => ({ __esModule: true, default: () => <div /> }));
 vi.mock('@/components/academic-calendar', () => ({ __esModule: true, default: () => <div /> }));
 
 const SESSION = '08d8d518-bc9a-4f25-8e1a-8b6f3264f59b';
